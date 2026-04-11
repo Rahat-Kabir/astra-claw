@@ -8,6 +8,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal — it ca
 - Reads and writes files via `read_file` and `write_file` tools
 - Runs shell commands via `shell` tool (with dangerous command approval)
 - Multi-turn conversations with session persistence (JSONL)
+- Cross-platform file search via `search_files` tool (content grep + filename find)
 - Streaming responses — tokens print live as they arrive
 - Supports OpenAI and OpenRouter as LLM providers
 
@@ -97,7 +98,8 @@ astra-claw/
 │   └── tools/
 │       ├── registry.py       # tool registry
 │       ├── file_tools.py     # read_file, write_file tools
-│       └── shell_tool.py     # shell command execution
+│       ├── shell_tool.py     # shell command execution
+│       └── search_tool.py    # file search (content + filename)
 ├── tests/
 │   └── test_features.py      # unit tests for all features
 └── pyproject.toml

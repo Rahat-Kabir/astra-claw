@@ -22,6 +22,7 @@
 - [x] `tools/shell_tool.py` — `shell` tool with dangerous command detection (13 patterns) + user approval callback
 - [x] `.env` loading — `python-dotenv` in `__main__.py`, loads before agent init
 - [x] Streaming responses — `stream=True` in API call, live token output via `sys.stdout.write()`
+- [x] `tools/search_tool.py` — `search_files` tool (content grep + filename find, cross-platform, capped at 50 results)
 
 ### Not Yet Built
 

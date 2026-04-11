@@ -50,7 +50,8 @@ astra-claw/
 │   └── tools/
 │       ├── registry.py       # register(), get_definitions(), dispatch()
 │       ├── file_tools.py     # read_file, write_file (with blocked-path safety)
-│       └── shell_tool.py     # shell command execution (with dangerous command approval)
+│       ├── shell_tool.py     # shell command execution (with dangerous command approval)
+│       └── search_tool.py    # search_files — content grep + filename find (cross-platform)
 ├── tests/
 │   └── test_features.py      # unit tests (pytest)
 ├── pyproject.toml

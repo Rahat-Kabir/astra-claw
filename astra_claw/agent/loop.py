@@ -18,6 +18,7 @@ from ..tools.registry import registry
 # Import tool modules so they register themselves
 from ..tools import file_tools  # noqa: F401
 from ..tools import shell_tool  # noqa: F401
+from ..tools import search_tool  # noqa: F401
 
 
 PROVIDER_BASE_URLS = {

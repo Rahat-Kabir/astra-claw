@@ -38,6 +38,11 @@ Final Response
 - User data lives in `~/.astraclaw/` (auto-created, survives updates)
 - Pattern learned from Hermes Agent's `get_hermes_home()`
 
+### Search Tool
+- Two modes: `target="content"` (grep/findstr) and `target="files"` (find/dir)
+- Cross-platform: auto-detects Windows vs Unix commands
+- Results capped at 50 to keep LLM context manageable
+
 ### Shell Tool Safety
 - 13 regex patterns detect dangerous commands (rm -r, chmod 777, SQL DROP, curl|sh, etc.)
 - `set_approval_callback()` lets `__main__.py` inject a user prompt for approval
