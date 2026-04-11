@@ -86,7 +86,7 @@ def main():
             break
 
         response, new_messages = agent.run_conversation(message, conversation_history=history)
-        print(f"\n{response}\n")
+        print()  # newline after streamed output
 
         # Save all new messages (user + assistant + tool) to session
         for msg in new_messages:

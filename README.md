@@ -8,6 +8,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal — it ca
 - Reads and writes files via `read_file` and `write_file` tools
 - Runs shell commands via `shell` tool (with dangerous command approval)
 - Multi-turn conversations with session persistence (JSONL)
+- Streaming responses — tokens print live as they arrive
 - Supports OpenAI and OpenRouter as LLM providers
 
 ## Quick Start

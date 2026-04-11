@@ -60,7 +60,8 @@ Final Response
 - Deep merged at load time — user only specifies what they changed
 
 ### LLM Integration
-- Uses `openai` Python SDK for all providers
+- Uses `openai` Python SDK for all providers with `stream=True`
+- Tokens print live via `sys.stdout.write()` + flush; tool calls accumulate silently
 - OpenAI and OpenRouter both use OpenAI-compatible API
 - Provider base URLs mapped in `agent/loop.py`
 - API keys: `load_dotenv()` in `__main__.py` loads `.env` file, then `loop.py` reads via `os.getenv()`

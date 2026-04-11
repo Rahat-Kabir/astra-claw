@@ -21,6 +21,7 @@
 - [x] `tests/test_features.py` — 24 unit tests for constants, config, registry, file_tools, prompt_builder
 - [x] `tools/shell_tool.py` — `shell` tool with dangerous command detection (13 patterns) + user approval callback
 - [x] `.env` loading — `python-dotenv` in `__main__.py`, loads before agent init
+- [x] Streaming responses — `stream=True` in API call, live token output via `sys.stdout.write()`
 
 ### Not Yet Built
 
@@ -29,7 +30,6 @@
 - [ ] `web_search` tool
 - [ ] Context compression (summarize old turns)
 - [ ] SOUL.md loading (custom persona)
-- [ ] Streaming responses
 - [ ] Gateway (Telegram, Discord, etc.)
 - [ ] Skills system
 - [ ] Cron scheduling

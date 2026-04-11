@@ -45,7 +45,7 @@ astra-claw/
 │   ├── config.py             # DEFAULT_CONFIG + deep merge + ensure home
 │   ├── session.py            # JSONL session persistence (create, save, load, list)
 │   ├── agent/
-│   │   ├── loop.py           # AstraAgent class + run_conversation() → (text, new_messages)
+│   │   ├── loop.py           # AstraAgent class + run_conversation() → streaming + tool loop
 │   │   └── prompt_builder.py # system prompt assembly
 │   └── tools/
 │       ├── registry.py       # register(), get_definitions(), dispatch()

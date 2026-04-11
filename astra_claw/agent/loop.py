@@ -5,6 +5,7 @@ Core conversation loop: call LLM → check for tool calls → dispatch → repea
 
 import json
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
@@ -79,41 +80,70 @@ class AstraAgent:
         while turn < self.max_turns:
             turn += 1
 
-            response = self.client.chat.completions.create(
+            # Stream the response — tokens arrive one by one
+            stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 tools=self.tools if self.tools else None,
+                stream=True,
             )
 
-            choice = response.choices[0]
-            assistant_msg = choice.message
+            # Accumulate pieces from the stream
+            content_parts = []
+            tool_calls_acc = {}  # index -> {id, function: {name, arguments}}
+
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+
+                # Text token — print immediately
+                if delta.content:
+                    content_parts.append(delta.content)
+                    if not tool_calls_acc:
+                        sys.stdout.write(delta.content)
+                        sys.stdout.flush()
+
+                # Tool call token — accumulate silently
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index if tc_delta.index is not None else 0
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {
+                                "id": tc_delta.id or "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        entry = tool_calls_acc[idx]
+                        if tc_delta.id:
+                            entry["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                entry["function"]["name"] += tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                entry["function"]["arguments"] += tc_delta.function.arguments
+
+            # Rebuild response from accumulated pieces
+            full_content = "".join(content_parts) or ""
+            tool_calls_list = [tool_calls_acc[i] for i in sorted(tool_calls_acc)] if tool_calls_acc else None
 
             # Append assistant message to history
-            msg_dict = {"role": "assistant", "content": assistant_msg.content or ""}
-            if assistant_msg.tool_calls:
-                msg_dict["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-                    for tc in assistant_msg.tool_calls
-                ]
+            msg_dict = {"role": "assistant", "content": full_content}
+            if tool_calls_list:
+                msg_dict["tool_calls"] = tool_calls_list
             messages.append(msg_dict)
             new_messages.append(msg_dict)
 
             # No tool calls — we're done
-            if not assistant_msg.tool_calls:
-                return assistant_msg.content or "", new_messages
+            if not tool_calls_list:
+                return full_content, new_messages
 
             # Execute each tool call
-            for tc in assistant_msg.tool_calls:
-                fn_name = tc.function.name
+            for tc in tool_calls_list:
+                fn_name = tc["function"]["name"]
                 try:
-                    fn_args = json.loads(tc.function.arguments)
+                    fn_args = json.loads(tc["function"]["arguments"])
                 except json.JSONDecodeError:
                     fn_args = {}
 
@@ -121,7 +151,7 @@ class AstraAgent:
 
                 tool_msg = {
                     "role": "tool",
-                    "tool_call_id": tc.id,
+                    "tool_call_id": tc["id"],
                     "content": result,
                 }
                 messages.append(tool_msg)
