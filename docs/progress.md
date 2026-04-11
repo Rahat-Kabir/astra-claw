@@ -44,3 +44,12 @@
 - [ ] Gateway (Telegram, Discord, etc.)
 - [ ] Skills system
 - [ ] Cron scheduling
+
+## v0.1.2 - Core Test Coverage Pass (2026-04-11)
+
+### Completed
+
+- [x] Added focused test modules for file tools, session persistence, shell execution, search behavior, and mocked agent loop flows
+- [x] Verified module-level runs for each new test file
+- [x] Verified the combined suite with `python -m pytest tests -v` -> 60 passed
+- [x] Added `docs/testing.md` with minimal test commands and suite layout

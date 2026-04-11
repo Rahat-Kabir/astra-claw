@@ -91,7 +91,14 @@ astra-claw/
 |       |-- shell_tool.py     # shell command execution
 |       `-- search_tool.py    # file search (content + filename)
 |-- tests/
-|   `-- test_features.py      # unit tests for core features
+|   |-- agent/               # mocked agent loop tests
+|   |-- tools/               # tool-level tests
+|   |-- test_features.py     # core regression tests
+|   `-- test_session.py      # session persistence tests
+|-- docs/
+|   |-- tech_spec.md         # technical design notes
+|   |-- progress.md          # implementation progress log
+|   `-- testing.md          # test commands and suite layout
 `-- pyproject.toml
 ```
 
@@ -126,12 +133,13 @@ If `tools.enabled_toolsets` is omitted, all registered and available tools are e
 
 ## Testing
 
-The current regression suite for the core agent lives in `tests/test_features.py`.
+Run the full suite:
 
 ```bash
-.\venv\Scripts\Activate.ps1
-python -m pytest tests/test_features.py -v
+python -m pytest tests -v
 ```
+
+For focused test commands and suite layout, see `docs/testing.md`.
 
 ## License
 

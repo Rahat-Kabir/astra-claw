@@ -51,7 +51,14 @@ astra-claw/
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       `-- search_tool.py    # search_files - content grep + filename find (cross-platform)
 |-- tests/
-|   `-- test_features.py      # unit tests (pytest)
+|   |-- agent/               # mocked agent loop tests
+|   |-- tools/               # tool-level tests
+|   |-- test_features.py     # core regression tests
+|   `-- test_session.py      # session persistence tests
+|-- docs/
+|   |-- tech_spec.md         # technical design notes
+|   |-- progress.md          # implementation progress log
+|   `-- testing.md           # test commands and suite layout
 |-- pyproject.toml
 `-- .env.example
 ```

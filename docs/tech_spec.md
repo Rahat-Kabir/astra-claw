@@ -127,3 +127,12 @@ __main__.py        (imports loop + session)
 |----------|----------|---------|
 | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+
+## Testing Strategy
+
+- `tests/test_features.py` covers core regressions for constants, config, registry behavior, and prompt assembly
+- `tests/test_session.py` covers JSONL session persistence and recovery behavior
+- `tests/tools/` contains module-level tests for file tools, shell execution, and search behavior
+- `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
+- The full suite is run with `python -m pytest tests -v`
+- Focused commands and suite layout live in `docs/testing.md`

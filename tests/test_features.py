@@ -1,7 +1,7 @@
-"""Tests for all existing astra-claw features.
+"""Tests for core astra-claw features.
 
-Covers: constants, config, tool registry, file_tools, prompt_builder.
-No API key required — these are pure unit tests.
+Covers: constants, config, tool registry, prompt_builder, and registry smoke checks.
+No API key required -- these are pure unit tests.
 
 Run:
     python -m pytest tests/test_features.py -v
@@ -12,11 +12,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-# ---------------------------------------------------------------------------
-# 1. constants.py — get_astraclaw_home()
-# ---------------------------------------------------------------------------
-
+from astra_claw.agent.prompt_builder import build_system_prompt
+from astra_claw.config import DEFAULT_CONFIG, _deep_merge, ensure_astraclaw_home, load_config
 from astra_claw.constants import get_astraclaw_home
+from astra_claw.tools import file_tools  # noqa: F401
+from astra_claw.tools.registry import ToolRegistry
+from astra_claw.tools.registry import registry as global_registry
 
 
 class TestConstants:
@@ -35,13 +36,6 @@ class TestConstants:
             assert get_astraclaw_home() == Path(custom)
 
 
-# ---------------------------------------------------------------------------
-# 2. config.py — ensure_astraclaw_home, _deep_merge, load_config
-# ---------------------------------------------------------------------------
-
-from astra_claw.config import DEFAULT_CONFIG, _deep_merge, ensure_astraclaw_home, load_config
-
-
 class TestConfig:
     def test_ensure_home_creates_dirs(self, tmp_path):
         """ensure_astraclaw_home() should create home + subdirs."""
@@ -57,7 +51,7 @@ class TestConfig:
         home = tmp_path / "astraclaw_test"
         with patch.dict(os.environ, {"ASTRACLAW_HOME": str(home)}):
             ensure_astraclaw_home()
-            ensure_astraclaw_home()  # no error
+            ensure_astraclaw_home()
 
     def test_deep_merge_simple(self):
         base = {"a": 1, "b": 2}
@@ -69,13 +63,13 @@ class TestConfig:
         override = {"model": {"default": "gpt-4o"}}
         result = _deep_merge(base, override)
         assert result["model"]["default"] == "gpt-4o"
-        assert result["model"]["provider"] == "openai"  # preserved
+        assert result["model"]["provider"] == "openai"
 
     def test_deep_merge_does_not_mutate_base(self):
         base = {"a": {"x": 1}}
         override = {"a": {"x": 2}}
         _deep_merge(base, override)
-        assert base["a"]["x"] == 1  # original unchanged
+        assert base["a"]["x"] == 1
 
     def test_load_config_defaults(self, tmp_path):
         """load_config() returns defaults when no config.yaml exists."""
@@ -95,7 +89,7 @@ class TestConfig:
         with patch.dict(os.environ, {"ASTRACLAW_HOME": str(home)}):
             config = load_config()
             assert config["model"]["default"] == "gpt-4o"
-            assert config["model"]["provider"] == "openai"  # default preserved
+            assert config["model"]["provider"] == "openai"
             assert config["agent"]["max_turns"] == 50
 
     def test_load_config_bad_yaml(self, tmp_path):
@@ -106,15 +100,7 @@ class TestConfig:
 
         with patch.dict(os.environ, {"ASTRACLAW_HOME": str(home)}):
             config = load_config()
-            # Should fall back to defaults without crashing
             assert config["model"]["default"] == DEFAULT_CONFIG["model"]["default"]
-
-
-# ---------------------------------------------------------------------------
-# 3. tools/registry.py — ToolRegistry
-# ---------------------------------------------------------------------------
-
-from astra_claw.tools.registry import ToolRegistry
 
 
 class TestToolRegistry:
@@ -147,7 +133,6 @@ class TestToolRegistry:
         schema = {"name": "bomb", "description": "explodes", "parameters": {"type": "object", "properties": {}}}
         reg.register("bomb", "test", schema, lambda args: (_ for _ in ()).throw(ValueError("boom")))
 
-        # Handler that raises
         def bad_handler(args):
             raise ValueError("boom")
 
@@ -217,52 +202,6 @@ class TestToolRegistry:
         assert [d["function"]["name"] for d in defs] == ["guarded"]
 
 
-# ---------------------------------------------------------------------------
-# 4. tools/file_tools.py — read_file
-# ---------------------------------------------------------------------------
-
-from astra_claw.tools.file_tools import read_file
-
-
-class TestFileTools:
-    def test_read_existing_file(self, tmp_path):
-        f = tmp_path / "hello.txt"
-        f.write_text("Hello, world!", encoding="utf-8")
-
-        result = json.loads(read_file({"path": str(f)}))
-        assert result["content"] == "Hello, world!"
-        assert "error" not in result
-
-    def test_read_nonexistent_file(self):
-        result = json.loads(read_file({"path": "/no/such/file/ever.txt"}))
-        assert "error" in result
-        assert "not found" in result["error"].lower()
-
-    def test_read_no_path(self):
-        result = json.loads(read_file({}))
-        assert "error" in result
-        assert "No path" in result["error"]
-
-    def test_read_empty_path(self):
-        result = json.loads(read_file({"path": ""}))
-        assert "error" in result
-
-    def test_read_multiline_file(self, tmp_path):
-        f = tmp_path / "multi.txt"
-        content = "line1\nline2\nline3\n"
-        f.write_text(content, encoding="utf-8")
-
-        result = json.loads(read_file({"path": str(f)}))
-        assert result["content"] == content
-
-
-# ---------------------------------------------------------------------------
-# 5. agent/prompt_builder.py — build_system_prompt
-# ---------------------------------------------------------------------------
-
-from astra_claw.agent.prompt_builder import build_system_prompt
-
-
 class TestPromptBuilder:
     def test_returns_string(self):
         prompt = build_system_prompt()
@@ -280,13 +219,6 @@ class TestPromptBuilder:
             prompt = build_system_prompt()
         assert "cmd-compatible" in prompt
         assert "findstr" in prompt
-
-
-# ---------------------------------------------------------------------------
-# 6. Singleton registry has read_file registered
-# ---------------------------------------------------------------------------
-
-from astra_claw.tools.registry import registry as global_registry
 
 
 class TestGlobalRegistry:
