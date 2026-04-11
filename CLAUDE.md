@@ -74,12 +74,13 @@ __main__.py        (imports loop + session)
 
 ## Rules
 
-- NEVER hardcode `~/.astraclaw` — use `get_astra_home()` from `constants.py`
-- All tool handlers MUST return a JSON string
-- New tool = new file in `tools/` + `registry.register()` at bottom
-- Tests must NEVER write to ~/.astraclaw/ — set ASTRACLAW_HOME env var to tmp_path
-- Sessions are JSONL files in `~/.astraclaw/sessions/` — first line is meta, rest are messages
-- `run_conversation()` returns `(text, new_messages)` — session saving happens in `__main__.py`, not in the agent
+- NEVER hardcode `~/.astraclaw` - use `get_astraclaw_home()` from `constants.py`.
+- All tool handlers MUST return a JSON string.
+- New tool = new file in `tools/` + `registry.register(name=..., toolset=..., ...)` at the bottom.
+- Tools may optionally provide a `check_fn` so unavailable tools are hidden from model schemas.
+- Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
+- Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
+- `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
 
 ## Must follow
 

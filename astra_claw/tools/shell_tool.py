@@ -128,4 +128,9 @@ SHELL_SCHEMA = {
     },
 }
 
-registry.register(name="shell", schema=SHELL_SCHEMA, handler=run_command)
+registry.register(
+    name="shell",
+    toolset="terminal",
+    schema=SHELL_SCHEMA,
+    handler=run_command,
+)

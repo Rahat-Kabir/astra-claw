@@ -1,8 +1,8 @@
-# Astra-Claw — Technical Specification
+# Astra-Claw - Technical Specification
 
 ## Architecture
 
-```
+```text
 User Input
     |
 __main__.py (parse args, create agent)
@@ -13,7 +13,7 @@ System Prompt (prompt_builder.py)
     |
 LLM API Call (OpenAI SDK)
     |
-Tool Calls? --> registry.dispatch() --> Append Results --> Loop back to LLM
+Tool Calls? -> registry.dispatch() -> Append Results -> Loop back to LLM
     | (no tools)
 Final Response
 ```
@@ -21,59 +21,86 @@ Final Response
 ## Core Design Decisions
 
 ### Session Persistence (JSONL)
-- Each session = one `.jsonl` file in `~/.astraclaw/sessions/`
-- First line is metadata (`{"type": "meta", "id": "...", "created": "..."}`)
-- Every subsequent line is a message (`user`, `assistant`, or `tool`) with auto-added `ts`
-- On load, `ts` is stripped before feeding messages back to the LLM
-- Chose JSONL over SQLite: zero deps, human-readable, easy to debug
-- SQLite upgrade path: when we need cross-session search or multi-user support
+
+- Each session is one `.jsonl` file in `~/.astraclaw/sessions/`
+- First line is metadata: `{"type": "meta", "id": "...", "created": "..."}`
+- Each later line is a message with an auto-added `ts`
+- `ts` is stripped before messages are replayed to the model
+- JSONL was chosen over SQLite for zero dependencies and easy inspection
 
 ### Single Source of Truth for Paths
-- `constants.py` → `get_astraclaw_home()` returns `~/.astraclaw/`
-- Overridable via `ASTRACLAW_HOME` env var
-- Every module imports this — never hardcode paths
 
-### Repo Code vs User Data Separation
-- Code lives in `astra-claw/astra_claw/` (repo, versioned)
-- User data lives in `~/.astraclaw/` (auto-created, survives updates)
-- Pattern learned from Hermes Agent's `get_hermes_home()`
-
-### Search Tool
-- Two modes: `target="content"` (grep/findstr) and `target="files"` (find/dir)
-- Cross-platform: auto-detects Windows vs Unix commands
-- Results capped at 50 to keep LLM context manageable
-
-### Shell Tool Safety
-- 13 regex patterns detect dangerous commands (rm -r, chmod 777, SQL DROP, curl|sh, etc.)
-- `set_approval_callback()` lets `__main__.py` inject a user prompt for approval
-- No callback registered = dangerous commands blocked outright
-- Safe commands run directly via `subprocess.run()` with 30s default timeout
-
-### File Tools Safety
-- `write_file` blocks writes to sensitive paths (`.env`, `.git`, `.ssh`, credentials, etc.)
-- Blocked patterns checked against full resolved path parts
+- `constants.py` exposes `get_astraclaw_home()`
+- `ASTRACLAW_HOME` can override the default path
+- Other modules should import this helper instead of hardcoding paths
 
 ### Tool Registry Pattern
-- Singleton `ToolRegistry` in `tools/registry.py`
+
+- `tools/registry.py` contains a singleton `ToolRegistry`
 - Tools self-register at import time via `registry.register()`
-- 3 methods: `register()`, `get_definitions()`, `dispatch()`
-- Adding a new tool = new file + register call. Zero changes to existing code.
+- Each registration now includes:
+  - `name`
+  - `toolset`
+  - `schema`
+  - `handler`
+  - optional `check_fn`
+- `get_definitions(enabled_toolsets=None)` only returns tools that:
+  - belong to an enabled toolset, when filtering is requested
+  - pass `check_fn()`, when one is provided
+- `dispatch()` still executes by tool name and always returns a JSON string
+
+### Toolset Filtering
+
+- Built-in tools are grouped by toolset:
+  - `filesystem`: `read_file`, `write_file`, `search_files`
+  - `terminal`: `shell`
+- `agent/loop.py` reads optional `tools.enabled_toolsets` from config and passes that filter into the registry
+- If no toolset filter is configured, all registered and available tools are exposed
+
+### Availability Checks
+
+- A tool may provide a `check_fn` to determine whether it should be exposed to the model
+- If `check_fn()` returns `False`, the tool schema is omitted
+- If `check_fn()` raises an exception, the tool is skipped rather than crashing schema generation
+- This is intended for future tools that depend on API keys, installed binaries, or external services
+
+### Search Tool
+
+- Two modes:
+  - `target="content"` uses grep/findstr-like search
+  - `target="files"` uses find/dir-like filename search
+- Cross-platform behavior is selected from the current OS
+- Results are capped at 50 lines/files
+
+### Shell Tool Safety
+
+- Regex patterns detect dangerous commands such as recursive delete, `mkfs`, `dd`, SQL `DROP`, and `curl|sh`
+- `set_approval_callback()` lets `__main__.py` inject an interactive approval prompt
+- Without a callback, dangerous commands are blocked
+- The Windows shell hint now reflects `subprocess.run(..., shell=True)` behavior more precisely: Windows commands should remain `cmd`-compatible
+
+### File Tools Safety
+
+- `write_file` blocks writes to sensitive paths such as `.env`, `.git`, `.ssh`, and credential-like filenames
+- Blocked patterns are checked against the resolved path parts
 
 ### Config: Defaults + User Overrides
-- `DEFAULT_CONFIG` dict hardcoded in `config.py`
-- User overrides in `~/.astraclaw/config.yaml`
-- Deep merged at load time — user only specifies what they changed
+
+- `DEFAULT_CONFIG` lives in `config.py`
+- User overrides are loaded from `~/.astraclaw/config.yaml`
+- Nested dictionaries are deep-merged
+- Optional `tools.enabled_toolsets` can limit which tool families are exposed to the model
 
 ### LLM Integration
-- Uses `openai` Python SDK for all providers with `stream=True`
-- Tokens print live via `sys.stdout.write()` + flush; tool calls accumulate silently
-- OpenAI and OpenRouter both use OpenAI-compatible API
-- Provider base URLs mapped in `agent/loop.py`
-- API keys: `load_dotenv()` in `__main__.py` loads `.env` file, then `loop.py` reads via `os.getenv()`
+
+- Uses the `openai` Python SDK with `stream=True`
+- Tokens stream directly to stdout
+- Tool calls are accumulated silently, then dispatched after the streamed response finishes
+- OpenAI and OpenRouter are both treated as OpenAI-compatible providers
 
 ## File Dependency Chain
 
-```
+```text
 constants.py       (no deps)
 config.py          (imports constants)
 session.py         (imports constants)
@@ -88,11 +115,11 @@ __main__.py        (imports loop + session)
 | Component | Choice | Why |
 |-----------|--------|-----|
 | Language | Python 3.11+ | Best LLM SDK support |
-| LLM SDK | `openai` | Works with OpenAI + OpenRouter — one interface |
-| Config | PyYAML | Simple, human-readable |
-| Tool calling | OpenAI function calling format | Industry standard |
-| Sessions | JSONL files | Zero deps, human-readable, debuggable |
-| User data | `~/.astraclaw/` | Separated from repo |
+| LLM SDK | `openai` | Works with OpenAI + OpenRouter through one client |
+| Config | PyYAML | Simple and human-readable |
+| Tool calling | OpenAI function calling format | Standard schema format |
+| Sessions | JSONL files | Zero deps and easy debugging |
+| User data | `~/.astraclaw/` | Kept outside the repo |
 
 ## Supported Providers
 

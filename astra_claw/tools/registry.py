@@ -14,7 +14,7 @@ Import chain (circular-import safe):
 
 import json
 import logging
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +25,41 @@ class ToolRegistry:
     def __init__(self):
         self._tools: Dict[str, dict] = {}
 
-    def register(self, name: str, schema: dict, handler: Callable):
+    def register(
+        self,
+        name: str,
+        toolset: str,
+        schema: dict,
+        handler: Callable,
+        check_fn: Optional[Callable] = None,
+    ):
         """Register a tool. Called at module-import time by each tool file."""
-        self._tools[name] = {"schema": schema, "handler": handler}
+        self._tools[name] = {
+            "toolset": toolset,
+            "schema": schema,
+            "handler": handler,
+            "check_fn": check_fn,
+        }
 
-    def get_definitions(self) -> List[dict]:
-        """Return OpenAI-format tool schemas for all registered tools."""
-        return [
-            {"type": "function", "function": entry["schema"]}
-            for entry in self._tools.values()
-        ]
+    def get_definitions(self, enabled_toolsets: Optional[Set[str]] = None) -> List[dict]:
+        """Return OpenAI-format tool schemas for registered and available tools."""
+        definitions = []
+        for entry in self._tools.values():
+            if enabled_toolsets is not None and entry["toolset"] not in enabled_toolsets:
+                continue
+
+            check_fn = entry.get("check_fn")
+            if check_fn is not None:
+                try:
+                    if not check_fn():
+                        continue
+                except Exception as e:
+                    logger.debug("Tool availability check failed: %s", e)
+                    continue
+
+            definitions.append({"type": "function", "function": entry["schema"]})
+
+        return definitions
 
     def dispatch(self, name: str, args: dict) -> str:
         """Execute a tool handler by name. Returns a JSON string."""

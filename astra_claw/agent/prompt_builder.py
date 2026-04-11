@@ -9,7 +9,7 @@ import platform
 DEFAULT_IDENTITY = """You are Astra-Claw, an AI agent that can take actions using tools.
 
 When the user asks you to do something, use the tools available to you.
-Do not describe what you would do — actually do it by calling the appropriate tool.
+Do not describe what you would do -- actually do it by calling the appropriate tool.
 
 Tool usage guidelines:
 - Use read_file/write_file for reading and writing files directly
@@ -25,11 +25,14 @@ def build_system_prompt() -> str:
     """Assemble the system prompt. Layers will be added here over time."""
     parts = [DEFAULT_IDENTITY.strip()]
 
-    # Inject environment context so the LLM uses correct shell commands
+    # Inject environment context so the LLM uses correct shell commands.
     cwd = os.getcwd()
     os_name = platform.system()  # "Windows", "Linux", "Darwin"
     if os_name == "Windows":
-        shell_hint = "Shell is Windows CMD. Use dir, type, where — NOT ls, cat, find."
+        shell_hint = (
+            "Shell runs via Windows shell=True semantics (cmd-compatible). "
+            "Use dir, type, where, findstr -- NOT ls, cat, grep."
+        )
     else:
         shell_hint = "Shell is Unix. Use ls, cat, find, grep."
 

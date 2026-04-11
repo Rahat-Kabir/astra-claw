@@ -121,7 +121,7 @@ class TestToolRegistry:
     def test_register_and_get_definitions(self):
         reg = ToolRegistry()
         schema = {"name": "dummy", "description": "test", "parameters": {"type": "object", "properties": {}}}
-        reg.register("dummy", schema, lambda args: json.dumps({"ok": True}))
+        reg.register("dummy", "test", schema, lambda args: json.dumps({"ok": True}))
 
         defs = reg.get_definitions()
         assert len(defs) == 1
@@ -131,7 +131,7 @@ class TestToolRegistry:
     def test_dispatch_success(self):
         reg = ToolRegistry()
         schema = {"name": "echo", "description": "echo", "parameters": {"type": "object", "properties": {}}}
-        reg.register("echo", schema, lambda args: json.dumps({"msg": args.get("text", "")}))
+        reg.register("echo", "test", schema, lambda args: json.dumps({"msg": args.get("text", "")}))
 
         result = json.loads(reg.dispatch("echo", {"text": "hello"}))
         assert result["msg"] == "hello"
@@ -145,7 +145,7 @@ class TestToolRegistry:
     def test_dispatch_handler_exception(self):
         reg = ToolRegistry()
         schema = {"name": "bomb", "description": "explodes", "parameters": {"type": "object", "properties": {}}}
-        reg.register("bomb", schema, lambda args: (_ for _ in ()).throw(ValueError("boom")))
+        reg.register("bomb", "test", schema, lambda args: (_ for _ in ()).throw(ValueError("boom")))
 
         # Handler that raises
         def bad_handler(args):
@@ -159,6 +159,62 @@ class TestToolRegistry:
     def test_empty_registry(self):
         reg = ToolRegistry()
         assert reg.get_definitions() == []
+
+    def test_get_definitions_filters_by_toolset(self):
+        reg = ToolRegistry()
+        schema_a = {"name": "a", "description": "a", "parameters": {"type": "object", "properties": {}}}
+        schema_b = {"name": "b", "description": "b", "parameters": {"type": "object", "properties": {}}}
+        reg.register("a", "filesystem", schema_a, lambda args: json.dumps({"ok": True}))
+        reg.register("b", "terminal", schema_b, lambda args: json.dumps({"ok": True}))
+
+        defs = reg.get_definitions(enabled_toolsets={"filesystem"})
+
+        assert [d["function"]["name"] for d in defs] == ["a"]
+
+    def test_get_definitions_skips_tool_when_check_fails(self):
+        reg = ToolRegistry()
+        schema = {"name": "guarded", "description": "guarded", "parameters": {"type": "object", "properties": {}}}
+        reg.register(
+            "guarded",
+            "web",
+            schema,
+            lambda args: json.dumps({"ok": True}),
+            check_fn=lambda: False,
+        )
+
+        assert reg.get_definitions() == []
+
+    def test_get_definitions_skips_tool_when_check_raises(self):
+        reg = ToolRegistry()
+        schema = {"name": "guarded", "description": "guarded", "parameters": {"type": "object", "properties": {}}}
+
+        def bad_check():
+            raise RuntimeError("nope")
+
+        reg.register(
+            "guarded",
+            "web",
+            schema,
+            lambda args: json.dumps({"ok": True}),
+            check_fn=bad_check,
+        )
+
+        assert reg.get_definitions() == []
+
+    def test_get_definitions_includes_tool_when_check_passes(self):
+        reg = ToolRegistry()
+        schema = {"name": "guarded", "description": "guarded", "parameters": {"type": "object", "properties": {}}}
+        reg.register(
+            "guarded",
+            "web",
+            schema,
+            lambda args: json.dumps({"ok": True}),
+            check_fn=lambda: True,
+        )
+
+        defs = reg.get_definitions(enabled_toolsets={"web"})
+
+        assert [d["function"]["name"] for d in defs] == ["guarded"]
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +274,12 @@ class TestPromptBuilder:
 
     def test_not_empty(self):
         assert len(build_system_prompt()) > 0
+
+    def test_windows_prompt_mentions_cmd_compatible_shell(self):
+        with patch("platform.system", return_value="Windows"):
+            prompt = build_system_prompt()
+        assert "cmd-compatible" in prompt
+        assert "findstr" in prompt
 
 
 # ---------------------------------------------------------------------------

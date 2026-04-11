@@ -143,4 +143,9 @@ SEARCH_FILES_SCHEMA = {
     },
 }
 
-registry.register(name="search_files", schema=SEARCH_FILES_SCHEMA, handler=search_files)
+registry.register(
+    name="search_files",
+    toolset="filesystem",
+    schema=SEARCH_FILES_SCHEMA,
+    handler=search_files,
+)

@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 from ..config import load_config
-from ..constants import get_astraclaw_home
 from .prompt_builder import build_system_prompt
 from ..tools.registry import registry
 
@@ -38,9 +37,12 @@ class AstraAgent:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or load_config()
         model_config = self.config.get("model", {})
+        tool_config = self.config.get("tools", {})
 
         self.model = model_config.get("default", "gpt-4o-mini")
         self.max_turns = self.config.get("agent", {}).get("max_turns", 20)
+        enabled_toolsets = tool_config.get("enabled_toolsets")
+        self.enabled_toolsets = set(enabled_toolsets) if enabled_toolsets is not None else None
 
         # Create LLM client
         provider = model_config.get("provider", "openai")
@@ -55,7 +57,7 @@ class AstraAgent:
         self.client = OpenAI(base_url=base_url, api_key=api_key)
 
         # Collect tool schemas from registry
-        self.tools = registry.get_definitions()
+        self.tools = registry.get_definitions(enabled_toolsets=self.enabled_toolsets)
 
     def run_conversation(
         self,

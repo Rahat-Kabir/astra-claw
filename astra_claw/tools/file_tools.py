@@ -125,5 +125,15 @@ WRITE_FILE_SCHEMA = {
 # Register tools
 # ---------------------------------------------------------------------------
 
-registry.register(name="read_file", schema=READ_FILE_SCHEMA, handler=read_file)
-registry.register(name="write_file", schema=WRITE_FILE_SCHEMA, handler=write_file)
+registry.register(
+    name="read_file",
+    toolset="filesystem",
+    schema=READ_FILE_SCHEMA,
+    handler=read_file,
+)
+registry.register(
+    name="write_file",
+    toolset="filesystem",
+    schema=WRITE_FILE_SCHEMA,
+    handler=write_file,
+)
