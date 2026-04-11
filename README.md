@@ -64,6 +64,17 @@ Loaded 4 messages.
 $ python -m astra_claw --sessions
 ```
 
+**Shell commands** — the agent can run terminal commands (asks approval for dangerous ones):
+
+```
+> list all python files in this directory
+[calls shell: find . -name "*.py"]
+
+> delete the temp folder
+⚠ Dangerous: recursive delete
+Allow? (y/n): y
+```
+
 **One-shot mode** — no session saved:
 
 ```
@@ -108,7 +119,7 @@ Override defaults by creating `~/.astraclaw/config.yaml`:
 
 ```yaml
 model:
-  default: gpt-4o
+  default: gpt-5.4-mini
   provider: openai
 agent:
   max_turns: 30
