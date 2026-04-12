@@ -12,6 +12,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
+- Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
 
 ## Quick Start
 
@@ -82,14 +83,16 @@ astra-claw/
 |   |-- constants.py          # get_astraclaw_home()
 |   |-- config.py             # config loading + defaults
 |   |-- session.py            # JSONL session persistence
+|   |-- memory.py             # MemoryStore - persistent memory (MEMORY.md + USER.md)
 |   |-- agent/
 |   |   |-- loop.py           # AstraAgent - core conversation loop
-|   |   `-- prompt_builder.py # system prompt assembly
+|   |   `-- prompt_builder.py # system prompt assembly (injects memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # tool registry with toolsets and availability filtering
 |       |-- file_tools.py     # read_file, write_file tools
 |       |-- shell_tool.py     # shell command execution
-|       `-- search_tool.py    # file search (content + filename)
+|       |-- search_tool.py    # file search (content + filename)
+|       `-- memory_tool.py    # memory tool (add/replace/remove)
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
 |   |-- tools/               # tool-level tests
@@ -127,6 +130,12 @@ tools:
   enabled_toolsets:
     - filesystem
     - terminal
+    - memory
+memory:
+  enabled: true
+  user_profile_enabled: true
+  memory_char_limit: 2200
+  user_char_limit: 1375
 ```
 
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.

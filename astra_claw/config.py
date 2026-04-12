@@ -24,6 +24,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "agent": {
         "max_turns": 20,
     },
+    "memory": {
+        "enabled": True,
+        "user_profile_enabled": True,
+        "memory_char_limit": 2200,
+        "user_char_limit": 1375,
+    },
 }
 
 

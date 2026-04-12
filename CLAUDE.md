@@ -44,14 +44,16 @@ astra-claw/
 │   ├── constants.py          # get_astra_home() — single source of truth
 │   ├── config.py             # DEFAULT_CONFIG + deep merge + ensure home
 │   ├── session.py            # JSONL session persistence (create, save, load, list)
+│   ├── memory.py             # MemoryStore — frozen-snapshot persistent memory (MEMORY.md + USER.md)
 │   ├── agent/
 │   │   ├── loop.py           # AstraAgent class + run_conversation() → streaming + tool loop
-│   │   └── prompt_builder.py # system prompt assembly
+│   │   └── prompt_builder.py # system prompt assembly (injects memory snapshot)
 │   └── tools/
 │       ├── registry.py       # register(), get_definitions(), dispatch()
 │       ├── file_tools.py     # read_file, write_file (with blocked-path safety)
 │       ├── shell_tool.py     # shell command execution (with dangerous command approval)
-│       └── search_tool.py    # search_files — content grep + filename find (cross-platform)
+│       ├── search_tool.py    # search_files — content grep + filename find (cross-platform)
+│       └── memory_tool.py    # memory tool — schema + JSON wrapper over MemoryStore
 ├── tests/
 │   └── test_features.py      # unit tests (pytest)
 ├── pyproject.toml
@@ -81,6 +83,10 @@ __main__.py        (imports loop + session)
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
+- Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), `§`-delimited, char-limited.
+- The `memory` tool is special-cased in `agent/loop.py` to receive the agent's `MemoryStore`; standalone registry dispatch returns an unavailable-error JSON.
+- Memory content is scanned for prompt-injection / exfiltration / invisible-unicode before persisting.
+- Frozen snapshot: `load_from_disk()` runs once at agent init; the system prompt never changes mid-session. Snapshot refreshes on next session start.
 
 ## Must follow
 

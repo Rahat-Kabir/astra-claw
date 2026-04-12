@@ -21,7 +21,14 @@ Always respond concisely. If a tool returns an error, explain what went wrong.
 """
 
 
-def build_system_prompt() -> str:
+MEMORY_HINT = (
+    "You have persistent memory that survives across sessions. Save durable "
+    "user preferences, corrections, and stable environment facts with the "
+    "memory tool. Do not save temporary task progress or session outcomes."
+)
+
+
+def build_system_prompt(memory_store=None, include_memory_hint: bool = False) -> str:
     """Assemble the system prompt. Layers will be added here over time."""
     parts = [DEFAULT_IDENTITY.strip()]
 
@@ -38,5 +45,16 @@ def build_system_prompt() -> str:
 
     parts.append(f"Environment: {os_name}, working directory: {cwd}")
     parts.append(shell_hint)
+
+    if include_memory_hint:
+        parts.append(MEMORY_HINT)
+
+    if memory_store is not None:
+        user_block = memory_store.format_for_system_prompt("user")
+        if user_block:
+            parts.append(user_block)
+        memory_block = memory_store.format_for_system_prompt("memory")
+        if memory_block:
+            parts.append(memory_block)
 
     return "\n\n".join(parts)

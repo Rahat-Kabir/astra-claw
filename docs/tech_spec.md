@@ -54,6 +54,7 @@ Final Response
 - Built-in tools are grouped by toolset:
   - `filesystem`: `read_file`, `write_file`, `search_files`
   - `terminal`: `shell`
+  - `memory`: `memory`
 - `agent/loop.py` reads optional `tools.enabled_toolsets` from config and passes that filter into the registry
 - If no toolset filter is configured, all registered and available tools are exposed
 
@@ -79,6 +80,20 @@ Final Response
 - Without a callback, dangerous commands are blocked
 - The Windows shell hint now reflects `subprocess.run(..., shell=True)` behavior more precisely: Windows commands should remain `cmd`-compatible
 
+### Memory System
+
+- Storage: `~/.astraclaw/memory/MEMORY.md` (agent notes) and `USER.md` (user profile)
+- Entries are joined by the `§` section delimiter and stored as plain text
+- `MemoryStore` (in `astra_claw/memory.py`) owns persistence, char limits, and content scanning
+- `tools/memory_tool.py` is a thin wrapper: schema + JSON dispatch over `MemoryStore`
+- Single `memory` tool with actions `add` / `replace` / `remove` and targets `memory` / `user`
+- Char limits (not token limits) keep budgets model-independent
+- Frozen snapshot: `load_from_disk()` runs once at agent init; the system prompt never changes mid-session, keeping the prefix cache stable. The snapshot refreshes on the next session start.
+- Content scanning rejects prompt-injection, exfiltration, and invisible-unicode payloads before persistence because entries are injected into the system prompt
+- Atomic writes via temp-file + `os.replace`; no file locking (single-user CLI)
+- The agent loop special-cases the `memory` tool so the handler receives the agent's `MemoryStore` instance. Standalone `registry.dispatch("memory", ...)` returns an unavailable-error JSON, keeping the registry contract uniform.
+- `build_system_prompt(memory_store, include_memory_hint)` injects user and memory blocks and, when memory is enabled, appends a short hint telling the model when to save
+
 ### File Tools Safety
 
 - `write_file` blocks writes to sensitive paths such as `.env`, `.git`, `.ssh`, and credential-like filenames
@@ -90,6 +105,7 @@ Final Response
 - User overrides are loaded from `~/.astraclaw/config.yaml`
 - Nested dictionaries are deep-merged
 - Optional `tools.enabled_toolsets` can limit which tool families are exposed to the model
+- `memory.enabled`, `memory.user_profile_enabled`, `memory.memory_char_limit`, `memory.user_char_limit` control the memory system; the agent creates a `MemoryStore` if either `enabled` flag is true
 
 ### LLM Integration
 
@@ -104,8 +120,9 @@ Final Response
 constants.py       (no deps)
 config.py          (imports constants)
 session.py         (imports constants)
+memory.py          (imports constants)
 tools/registry.py  (no deps)
-tools/*.py         (import registry)
+tools/*.py         (import registry; memory_tool also imports memory)
 agent/loop.py      (imports all of the above)
 __main__.py        (imports loop + session)
 ```
@@ -132,7 +149,8 @@ __main__.py        (imports loop + session)
 
 - `tests/test_features.py` covers core regressions for constants, config, registry behavior, and prompt assembly
 - `tests/test_session.py` covers JSONL session persistence and recovery behavior
-- `tests/tools/` contains module-level tests for file tools, shell execution, and search behavior
+- `tests/test_memory.py` covers `MemoryStore` add/replace/remove, char limits, threat scanning, and frozen-snapshot stability
+- `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - The full suite is run with `python -m pytest tests -v`
 - Focused commands and suite layout live in `docs/testing.md`

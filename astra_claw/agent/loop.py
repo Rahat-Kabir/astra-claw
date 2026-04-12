@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 from ..config import load_config
+from ..memory import MemoryStore
 from .prompt_builder import build_system_prompt
 from ..tools.registry import registry
 
@@ -18,6 +19,7 @@ from ..tools.registry import registry
 from ..tools import file_tools  # noqa: F401
 from ..tools import shell_tool  # noqa: F401
 from ..tools import search_tool  # noqa: F401
+from ..tools import memory_tool as memory_tool_module  # noqa: F401
 
 
 PROVIDER_BASE_URLS = {
@@ -43,6 +45,19 @@ class AstraAgent:
         self.max_turns = self.config.get("agent", {}).get("max_turns", 20)
         enabled_toolsets = tool_config.get("enabled_toolsets")
         self.enabled_toolsets = set(enabled_toolsets) if enabled_toolsets is not None else None
+
+        # Memory: load frozen snapshot once at agent init.
+        memory_config = self.config.get("memory", {})
+        memory_enabled = memory_config.get("enabled", False)
+        user_profile_enabled = memory_config.get("user_profile_enabled", False)
+        if memory_enabled or user_profile_enabled:
+            self.memory_store = MemoryStore(
+                memory_char_limit=memory_config.get("memory_char_limit", 2200),
+                user_char_limit=memory_config.get("user_char_limit", 1375),
+            )
+            self.memory_store.load_from_disk()
+        else:
+            self.memory_store = None
 
         # Create LLM client
         provider = model_config.get("provider", "openai")
@@ -71,7 +86,16 @@ class AstraAgent:
         This allows the caller to persist them without the agent knowing about sessions.
         """
         messages = list(conversation_history) if conversation_history else []
-        messages.insert(0, {"role": "system", "content": build_system_prompt()})
+        messages.insert(
+            0,
+            {
+                "role": "system",
+                "content": build_system_prompt(
+                    memory_store=self.memory_store,
+                    include_memory_hint=self.memory_store is not None,
+                ),
+            },
+        )
 
         user_msg = {"role": "user", "content": user_message}
         messages.append(user_msg)
@@ -150,7 +174,17 @@ class AstraAgent:
                 except json.JSONDecodeError:
                     fn_args = {}
 
-                result = registry.dispatch(fn_name, fn_args)
+                if fn_name == "memory":
+                    from ..tools.memory_tool import memory_tool
+                    result = memory_tool(
+                        action=fn_args.get("action", ""),
+                        target=fn_args.get("target", "memory"),
+                        content=fn_args.get("content"),
+                        old_text=fn_args.get("old_text"),
+                        store=self.memory_store,
+                    )
+                else:
+                    result = registry.dispatch(fn_name, fn_args)
 
                 tool_msg = {
                     "role": "tool",

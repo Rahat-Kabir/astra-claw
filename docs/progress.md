@@ -37,7 +37,6 @@
 ### Not Yet Built
 
 - [ ] Provider fallback (OpenAI -> OpenRouter on failure)
-- [ ] Memory system (markdown files in `~/.astraclaw/memory/`)
 - [ ] `web_search` tool
 - [ ] Context compression (summarize old turns)
 - [ ] SOUL.md loading (custom persona)
@@ -53,3 +52,17 @@
 - [x] Verified module-level runs for each new test file
 - [x] Verified the combined suite with `python -m pytest tests -v` -> 60 passed
 - [x] Added `docs/testing.md` with minimal test commands and suite layout
+
+## v0.1.3 - Memory System (2026-04-12)
+
+### Completed
+
+- [x] `astra_claw/memory.py` - `MemoryStore` with add/replace/remove, `§`-delimited entries, char limits, atomic writes, frozen system-prompt snapshot
+- [x] Content scanning rejects prompt-injection / exfiltration / invisible-unicode payloads before persistence
+- [x] `astra_claw/tools/memory_tool.py` - schema + thin JSON wrapper registered in the `memory` toolset
+- [x] `astra_claw/agent/loop.py` - creates `MemoryStore` when `memory.enabled` or `memory.user_profile_enabled`, loads snapshot once, special-cases `memory` tool dispatch to inject the store
+- [x] `astra_claw/agent/prompt_builder.py` - `build_system_prompt(memory_store, include_memory_hint)` injects user + memory blocks and short behavior hint
+- [x] `astra_claw/config.py` - `memory` defaults (enabled flags + char limits)
+- [x] `tests/test_memory.py` - 14 `MemoryStore` tests (round-trip, dedup, char limit, threat scanning, frozen snapshot stability, no delimiter corruption)
+- [x] `tests/tools/test_memory_tool.py` - 9 wrapper tests (schema, missing store, arg validation, standalone dispatch error)
+- [x] Verified new tests: 23/23 passing via `python -m pytest tests/test_memory.py tests/tools/test_memory_tool.py -v`

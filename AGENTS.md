@@ -18,7 +18,7 @@ Instructions for AI coding assistants and developers working on the astra-claw c
 ## Global
 
 - After adding a new file, tool, or feature, update `README.md` and the Project Structure section in this file to reflect the change.
-- After code, update `docs/tech_spec.md` and `docs/progress.md` with the decisions made in the session.
+- After code, update `docs/tech_spec.md` and `docs/progress.md` with the decisions made in the session shortly also `docs/testing.md` if any
 
 ## Workflow
 
@@ -42,19 +42,22 @@ astra-claw/
 |   |-- constants.py          # get_astraclaw_home() - single source of truth
 |   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
 |   |-- session.py            # JSONL session persistence (create, save, load, list)
+|   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- agent/
 |   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop
-|   |   `-- prompt_builder.py # system prompt assembly
+|   |   `-- prompt_builder.py # system prompt assembly (injects memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
 |       |-- file_tools.py     # read_file, write_file (with blocked-path safety)
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
-|       `-- search_tool.py    # search_files - content grep + filename find (cross-platform)
+|       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
+|       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
-|   |-- tools/               # tool-level tests
+|   |-- tools/               # tool-level tests (includes test_memory_tool.py)
 |   |-- test_features.py     # core regression tests
-|   `-- test_session.py      # session persistence tests
+|   |-- test_session.py      # session persistence tests
+|   `-- test_memory.py       # MemoryStore tests
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
 |   |-- progress.md          # implementation progress log
@@ -86,6 +89,10 @@ __main__.py        (imports loop + session)
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
+- Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
+- The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
+- Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
+- Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 
 ## Must Follow
 
