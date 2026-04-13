@@ -13,6 +13,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Supports OpenAI and OpenRouter
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
 - Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
+- Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
 
 ## Quick Start
 
@@ -84,9 +85,10 @@ astra-claw/
 |   |-- config.py             # config loading + defaults
 |   |-- session.py            # JSONL session persistence
 |   |-- memory.py             # MemoryStore - persistent memory (MEMORY.md + USER.md)
+|   |-- soul.py               # SOUL.md loader + first-run seeding
 |   |-- agent/
 |   |   |-- loop.py           # AstraAgent - core conversation loop
-|   |   `-- prompt_builder.py # system prompt assembly (injects memory snapshot)
+|   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # tool registry with toolsets and availability filtering
 |       |-- file_tools.py     # read_file, write_file tools
@@ -97,6 +99,7 @@ astra-claw/
 |   |-- agent/               # mocked agent loop tests
 |   |-- tools/               # tool-level tests
 |   |-- test_features.py     # core regression tests
+|   |-- test_soul.py         # SOUL.md seeding and loading tests
 |   `-- test_session.py      # session persistence tests
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
@@ -112,11 +115,14 @@ User data lives in `~/.astraclaw/` by default:
 ```text
 ~/.astraclaw/
 |-- config.yaml
+|-- SOUL.md
 |-- sessions/
 |-- memory/
 |-- skills/
 `-- logs/
 ```
+
+`SOUL.md` is seeded automatically on first run if it does not already exist. Edit it to change Astra-Claw's default identity and tone globally.
 
 Override defaults by creating `~/.astraclaw/config.yaml`:
 

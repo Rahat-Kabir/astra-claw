@@ -13,6 +13,7 @@ from typing import Any, Dict
 import yaml
 
 from .constants import get_astraclaw_home
+from .soul import ensure_default_soul_md
 
 
 DEFAULT_CONFIG: Dict[str, Any] = {
@@ -39,6 +40,7 @@ def ensure_astraclaw_home() -> Path:
     home.mkdir(parents=True, exist_ok=True)
     for subdir in ("sessions", "memory", "skills", "logs"):
         (home / subdir).mkdir(exist_ok=True)
+    ensure_default_soul_md()
     return home
 
 

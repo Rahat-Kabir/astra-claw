@@ -39,7 +39,6 @@
 - [ ] Provider fallback (OpenAI -> OpenRouter on failure)
 - [ ] `web_search` tool
 - [ ] Context compression (summarize old turns)
-- [ ] SOUL.md loading (custom persona)
 - [ ] Gateway (Telegram, Discord, etc.)
 - [ ] Skills system
 - [ ] Cron scheduling
@@ -66,3 +65,13 @@
 - [x] `tests/test_memory.py` - 14 `MemoryStore` tests (round-trip, dedup, char limit, threat scanning, frozen snapshot stability, no delimiter corruption)
 - [x] `tests/tools/test_memory_tool.py` - 9 wrapper tests (schema, missing store, arg validation, standalone dispatch error)
 - [x] Verified new tests: 23/23 passing via `python -m pytest tests/test_memory.py tests/tools/test_memory_tool.py -v`
+
+## v0.1.4 - SOUL.md Identity Layer (2026-04-13)
+
+### Completed
+
+- [x] `astra_claw/soul.py` - `SOUL.md` loader with first-run seeding, prompt-injection scanning, and truncation
+- [x] `astra_claw/config.py` - `ensure_astraclaw_home()` now seeds `~/.astraclaw/SOUL.md` when missing
+- [x] `astra_claw/agent/prompt_builder.py` - prompt identity now loads from `SOUL.md` first, then falls back to `DEFAULT_IDENTITY`
+- [x] `tests/test_soul.py` - focused tests for seeding, no-overwrite behavior, valid loading, fallback, unsafe-content blocking, and truncation
+- [x] Verified focused tests: `python -m pytest tests/test_soul.py tests/test_features.py -v` -> 33 passed

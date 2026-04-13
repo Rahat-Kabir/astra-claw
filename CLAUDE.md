@@ -45,6 +45,7 @@ astra-claw/
 │   ├── config.py             # DEFAULT_CONFIG + deep merge + ensure home
 │   ├── session.py            # JSONL session persistence (create, save, load, list)
 │   ├── memory.py             # MemoryStore — frozen-snapshot persistent memory (MEMORY.md + USER.md)
+│   ├── soul.py               # SOUL.md loader — primary identity layer (seeded on first run, scanned + truncated)
 │   ├── agent/
 │   │   ├── loop.py           # AstraAgent class + run_conversation() → streaming + tool loop
 │   │   └── prompt_builder.py # system prompt assembly (injects memory snapshot)
@@ -87,6 +88,7 @@ __main__.py        (imports loop + session)
 - The `memory` tool is special-cased in `agent/loop.py` to receive the agent's `MemoryStore`; standalone registry dispatch returns an unavailable-error JSON.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode before persisting.
 - Frozen snapshot: `load_from_disk()` runs once at agent init; the system prompt never changes mid-session. Snapshot refreshes on next session start.
+- Identity: `~/.astraclaw/SOUL.md`, seeded on first run, loaded as first system-prompt layer (falls back to `DEFAULT_IDENTITY`), scanned + truncated at 12k chars.
 
 ## Must follow
 

@@ -14,6 +14,7 @@ python -m pytest tests -v
 
 ```bash
 python -m pytest tests/test_features.py -v
+python -m pytest tests/test_soul.py tests/test_features.py -v
 python -m pytest tests/test_session.py -v
 python -m pytest tests/tools/test_file_tools.py -v
 python -m pytest tests/tools/test_shell_tool.py -v
@@ -24,6 +25,7 @@ python -m pytest tests/agent/test_loop.py -v
 ## Test Layout
 
 - `tests/test_features.py`: core regression tests for constants, config, registry, and prompt builder
+- `tests/test_soul.py`: SOUL.md seeding, loading, fallback, and truncation tests
 - `tests/test_session.py`: JSONL session persistence tests
 - `tests/tools/`: tool-level tests for file, shell, and search behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls

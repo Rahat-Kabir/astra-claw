@@ -94,6 +94,15 @@ Final Response
 - The agent loop special-cases the `memory` tool so the handler receives the agent's `MemoryStore` instance. Standalone `registry.dispatch("memory", ...)` returns an unavailable-error JSON, keeping the registry contract uniform.
 - `build_system_prompt(memory_store, include_memory_hint)` injects user and memory blocks and, when memory is enabled, appends a short hint telling the model when to save
 
+### SOUL.md Identity Layer
+
+- Storage: `~/.astraclaw/SOUL.md`
+- `astra_claw/soul.py` owns starter-file seeding, loading, scanning, and truncation
+- `ensure_astraclaw_home()` seeds a default `SOUL.md` on first run if the user does not already have one
+- `load_soul_md()` returns `None` when the file is missing, empty, unreadable, or unusable; prompt assembly then falls back to `DEFAULT_IDENTITY`
+- Valid `SOUL.md` content becomes slot #1 of the system prompt, ahead of memory and environment hints
+- Content is security-scanned for prompt-injection / invisible-unicode payloads and truncated with a head/tail marker if oversized
+
 ### File Tools Safety
 
 - `write_file` blocks writes to sensitive paths such as `.env`, `.git`, `.ssh`, and credential-like filenames
@@ -106,6 +115,7 @@ Final Response
 - Nested dictionaries are deep-merged
 - Optional `tools.enabled_toolsets` can limit which tool families are exposed to the model
 - `memory.enabled`, `memory.user_profile_enabled`, `memory.memory_char_limit`, `memory.user_char_limit` control the memory system; the agent creates a `MemoryStore` if either `enabled` flag is true
+- `SOUL.md` does not currently have config knobs; it is a first-run home-level file rather than a config-driven feature
 
 ### LLM Integration
 
@@ -118,9 +128,10 @@ Final Response
 
 ```text
 constants.py       (no deps)
-config.py          (imports constants)
+config.py          (imports constants, soul)
 session.py         (imports constants)
 memory.py          (imports constants)
+soul.py            (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry; memory_tool also imports memory)
 agent/loop.py      (imports all of the above)
@@ -150,6 +161,7 @@ __main__.py        (imports loop + session)
 - `tests/test_features.py` covers core regressions for constants, config, registry behavior, and prompt assembly
 - `tests/test_session.py` covers JSONL session persistence and recovery behavior
 - `tests/test_memory.py` covers `MemoryStore` add/replace/remove, char limits, threat scanning, and frozen-snapshot stability
+- `tests/test_soul.py` covers first-run seeding, no-overwrite behavior, loading, fallback, threat blocking, and truncation
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - The full suite is run with `python -m pytest tests -v`

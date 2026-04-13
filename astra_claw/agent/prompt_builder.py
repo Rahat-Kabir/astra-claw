@@ -6,6 +6,8 @@ MVP: hardcoded identity. Later: load from SOUL.md, inject memory, context files.
 import os
 import platform
 
+from ..soul import load_soul_md
+
 DEFAULT_IDENTITY = """You are Astra-Claw, an AI agent that can take actions using tools.
 
 When the user asks you to do something, use the tools available to you.
@@ -30,7 +32,7 @@ MEMORY_HINT = (
 
 def build_system_prompt(memory_store=None, include_memory_hint: bool = False) -> str:
     """Assemble the system prompt. Layers will be added here over time."""
-    parts = [DEFAULT_IDENTITY.strip()]
+    parts = [(load_soul_md() or DEFAULT_IDENTITY).strip()]
 
     # Inject environment context so the LLM uses correct shell commands.
     cwd = os.getcwd()

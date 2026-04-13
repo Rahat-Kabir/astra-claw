@@ -43,9 +43,10 @@ astra-claw/
 |   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
 |   |-- session.py            # JSONL session persistence (create, save, load, list)
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
+|   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
 |   |-- agent/
 |   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop
-|   |   `-- prompt_builder.py # system prompt assembly (injects memory snapshot)
+|   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
 |       |-- file_tools.py     # read_file, write_file (with blocked-path safety)
@@ -57,6 +58,7 @@ astra-claw/
 |   |-- tools/               # tool-level tests (includes test_memory_tool.py)
 |   |-- test_features.py     # core regression tests
 |   |-- test_session.py      # session persistence tests
+|   |-- test_soul.py         # SOUL.md seeding / loading / fallback tests
 |   `-- test_memory.py       # MemoryStore tests
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
@@ -88,11 +90,13 @@ __main__.py        (imports loop + session)
 - Tools may optionally provide a `check_fn` so unavailable tools are hidden from model schemas.
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
+- `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
+- `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
 
 ## Must Follow
 
