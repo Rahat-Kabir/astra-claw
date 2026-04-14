@@ -86,3 +86,15 @@
 - [x] `tests/agent/test_loop.py` - added focused tests for transient fallback success, bad-request no-fallback, and fallback-client creation failure
 - [x] `tests/test_features.py` - added helper tests for route resolution and failover-worthy error classification
 - [x] Verified focused tests: `python -m pytest tests/agent/test_loop.py tests/test_features.py -v` -> 34 passed
+
+## v0.1.6 - Workspace Fence (2026-04-14)
+
+### Completed
+
+- [x] `astra_claw/constants.py` - added `_workspace_fence`, `set_workspace_fence()`, `get_workspace_fence()` (falls back to cwd when unset)
+- [x] `astra_claw/__main__.py` - `--workspace <path>` flag parsed first, validates + resolves path, `os.chdir()`, sets fence, prints workspace in session banner
+- [x] `astra_claw/tools/file_tools.py` - `_inside_fence()` check in `write_file` runs before the blocklist; rejects escapes with `"escapes workspace fence"`
+- [x] `read_file` and `shell` intentionally left unfenced (reads are non-destructive, shell cwd inheritance already scopes normal commands)
+- [x] `tests/test_workspace.py` - 7 tests (inside-ok, relative-escape-blocked, absolute-escape-blocked, no-fence-fallback, flag-sets-fence, bad-path-exits, flag-absent-noop)
+- [x] `tests/tools/test_file_tools.py` - autouse fixture points fence at `tmp_path` so existing write tests still pass
+- [x] Verified focused tests: `python -m pytest tests/test_workspace.py tests/tools/test_file_tools.py -v` -> 18 passed

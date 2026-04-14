@@ -1,6 +1,17 @@
 import json
 
+import pytest
+
+from astra_claw import constants
 from astra_claw.tools.file_tools import read_file, write_file
+
+
+@pytest.fixture(autouse=True)
+def _fence_tmp_path(tmp_path):
+    """Point the workspace fence at tmp_path for every file-tool test."""
+    constants.set_workspace_fence(tmp_path)
+    yield
+    constants._workspace_fence = None
 
 
 class TestFileTools:

@@ -107,6 +107,8 @@ Final Response
 
 - `write_file` blocks writes to sensitive paths such as `.env`, `.git`, `.ssh`, and credential-like filenames
 - Blocked patterns are checked against the resolved path parts
+- Workspace fence runs **before** the blocklist: when `--workspace <path>` is passed, `write_file` rejects any resolved path that does not sit under `get_workspace_fence()`. Fence is unset by default and falls back to cwd, so existing behavior is preserved when the flag is absent.
+- Fence scope is intentionally narrow: only `write_file` is jailed. `read_file` stays unfenced (reads are non-destructive) and `shell` is unfenced (chdir inheritance already scopes normal commands; fully jailing shell args is out of scope because of Windows quoting + pipes + redirects). The dangerous-command approval callback remains the defense for destructive shell usage.
 
 ### Config: Defaults + User Overrides
 
@@ -167,6 +169,7 @@ __main__.py        (imports loop + session)
 - `tests/test_session.py` covers JSONL session persistence and recovery behavior
 - `tests/test_memory.py` covers `MemoryStore` add/replace/remove, char limits, threat scanning, and frozen-snapshot stability
 - `tests/test_soul.py` covers first-run seeding, no-overwrite behavior, loading, fallback, threat blocking, and truncation
+- `tests/test_workspace.py` covers the `--workspace` flag and the `write_file` fence (inside-ok, relative escape blocked, absolute escape blocked, no-fence fallback, flag parsing, bad path exit)
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls

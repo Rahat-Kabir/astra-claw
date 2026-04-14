@@ -15,6 +15,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
 - Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
+- Workspace fence: `--workspace <path>` locks `write_file` to a single directory tree for safe sandbox testing
 
 ## Quick Start
 
@@ -75,6 +76,16 @@ One-shot mode does not save a session:
 ```text
 $ python -m astra_claw "read README.md and summarize it"
 ```
+
+Lock the agent to a sandbox directory for safe testing:
+
+```text
+$ python -m astra_claw --workspace d:/PROJECT/sandbox
+Astra-Claw agent. Session: 2026-04-14_abcd1234
+Workspace: d:\PROJECT\sandbox
+```
+
+`write_file` rejects any resolved path outside the workspace (relative escapes, absolute paths, or `~`). `read_file` and `shell` are not fenced and still run relative to the chdir'd cwd.
 
 ## Project Structure
 

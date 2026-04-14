@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 
+from ..constants import get_workspace_fence
 from .registry import registry
 
 
@@ -31,6 +32,24 @@ def _is_write_blocked(filepath: Path) -> bool:
         if pattern == name or pattern in parts:
             return True
     return False
+
+
+def _inside_fence(filepath: Path) -> bool:
+    """Return True when filepath resolves inside the active workspace fence."""
+    fence = get_workspace_fence()
+    try:
+        resolved = filepath.resolve()
+    except OSError:
+        return False
+    try:
+        return resolved.is_relative_to(fence)
+    except AttributeError:
+        # Python < 3.9 fallback (astra-claw targets 3.10+, kept defensive).
+        try:
+            resolved.relative_to(fence)
+            return True
+        except ValueError:
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +88,10 @@ def write_file(args: dict) -> str:
         return json.dumps({"error": "No content provided"})
 
     filepath = Path(path).expanduser()
+
+    # Fence check — reject paths that escape the active workspace.
+    if not _inside_fence(filepath):
+        return json.dumps({"error": f"Write denied: '{path}' escapes workspace fence"})
 
     # Safety check
     if _is_write_blocked(filepath):

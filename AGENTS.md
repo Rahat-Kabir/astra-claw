@@ -38,8 +38,8 @@ source venv/bin/activate     # Git Bash / WSL
 ```text
 astra-claw/
 |-- astra_claw/
-|   |-- __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions)
-|   |-- constants.py          # get_astraclaw_home() - single source of truth
+|   |-- __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions, --workspace)
+|   |-- constants.py          # get_astraclaw_home() + get_workspace_fence() - single source of truth
 |   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
 |   |-- llm.py                # provider routing, client creation, and transient fallback policy
 |   |-- session.py            # JSONL session persistence (create, save, load, list)
@@ -60,6 +60,7 @@ astra-claw/
 |   |-- test_features.py     # core regression tests
 |   |-- test_session.py      # session persistence tests
 |   |-- test_soul.py         # SOUL.md seeding / loading / fallback tests
+|   |-- test_workspace.py    # --workspace flag + write_file fence tests
 |   `-- test_memory.py       # MemoryStore tests
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
@@ -100,6 +101,7 @@ __main__.py        (imports loop + session)
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
 - LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
+- Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` rejects any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
 
 ## Must Follow
 
