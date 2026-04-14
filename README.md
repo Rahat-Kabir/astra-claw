@@ -11,6 +11,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Persists interactive sessions as JSONL transcripts
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
+- Retries once on a fallback provider/model for transient LLM failures
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
 - Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
@@ -83,6 +84,7 @@ astra-claw/
 |   |-- __main__.py           # entry point (interactive, one-shot, --session, --sessions)
 |   |-- constants.py          # get_astraclaw_home()
 |   |-- config.py             # config loading + defaults
+|   |-- llm.py                # provider routing, client creation, fallback policy
 |   |-- session.py            # JSONL session persistence
 |   |-- memory.py             # MemoryStore - persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding
@@ -130,6 +132,8 @@ Override defaults by creating `~/.astraclaw/config.yaml`:
 model:
   default: gpt-5.4-mini
   provider: openai
+  fallback_provider: openrouter
+  fallback_model: gpt-5.4-mini
 agent:
   max_turns: 30
 tools:
@@ -145,6 +149,8 @@ memory:
 ```
 
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.
+
+Fallback retries only apply to transient/runtime failures such as timeouts, connection errors, rate limits, and 5xx responses. Auth and bad-request errors do not fail over.
 
 ## Testing
 

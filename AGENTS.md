@@ -41,6 +41,7 @@ astra-claw/
 |   |-- __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions)
 |   |-- constants.py          # get_astraclaw_home() - single source of truth
 |   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
+|   |-- llm.py                # provider routing, client creation, and transient fallback policy
 |   |-- session.py            # JSONL session persistence (create, save, load, list)
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
@@ -75,10 +76,11 @@ astra-claw/
 ```text
 constants.py       (no deps)
 config.py          (imports constants)
+llm.py             (imports OpenAI SDK only)
 session.py         (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry)
-agent/loop.py      (imports all of the above)
+agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
 __main__.py        (imports loop + session)
 ```
 
@@ -97,6 +99,7 @@ __main__.py        (imports loop + session)
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
+- LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
 
 ## Must Follow
 

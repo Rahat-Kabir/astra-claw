@@ -36,7 +36,6 @@
 
 ### Not Yet Built
 
-- [ ] Provider fallback (OpenAI -> OpenRouter on failure)
 - [ ] `web_search` tool
 - [ ] Context compression (summarize old turns)
 - [ ] Gateway (Telegram, Discord, etc.)
@@ -75,3 +74,15 @@
 - [x] `astra_claw/agent/prompt_builder.py` - prompt identity now loads from `SOUL.md` first, then falls back to `DEFAULT_IDENTITY`
 - [x] `tests/test_soul.py` - focused tests for seeding, no-overwrite behavior, valid loading, fallback, unsafe-content blocking, and truncation
 - [x] Verified focused tests: `python -m pytest tests/test_soul.py tests/test_features.py -v` -> 33 passed
+
+## v0.1.5 - Provider Fallback (2026-04-14)
+
+### Completed
+
+- [x] `astra_claw/llm.py` - centralized provider routing, client creation, and transient failover classification
+- [x] `astra_claw/config.py` - added `model.fallback_model` alongside `fallback_provider`
+- [x] `astra_claw/agent/loop.py` - primary route + one-step fallback retry when the primary fails before meaningful streamed output
+- [x] Fallback policy limited to transient/runtime failures (`timeout`, connection errors, `429`, `5xx`); auth and bad-request failures do not fail over
+- [x] `tests/agent/test_loop.py` - added focused tests for transient fallback success, bad-request no-fallback, and fallback-client creation failure
+- [x] `tests/test_features.py` - added helper tests for route resolution and failover-worthy error classification
+- [x] Verified focused tests: `python -m pytest tests/agent/test_loop.py tests/test_features.py -v` -> 34 passed

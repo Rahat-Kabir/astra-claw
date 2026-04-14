@@ -11,7 +11,7 @@ AstraAgent.run_conversation()
     |
 System Prompt (prompt_builder.py)
     |
-LLM API Call (OpenAI SDK)
+LLM Route Selection + API Call (llm.py + OpenAI SDK)
     |
 Tool Calls? -> registry.dispatch() -> Append Results -> Loop back to LLM
     | (no tools)
@@ -115,6 +115,7 @@ Final Response
 - Nested dictionaries are deep-merged
 - Optional `tools.enabled_toolsets` can limit which tool families are exposed to the model
 - `memory.enabled`, `memory.user_profile_enabled`, `memory.memory_char_limit`, `memory.user_char_limit` control the memory system; the agent creates a `MemoryStore` if either `enabled` flag is true
+- `model.fallback_provider` and `model.fallback_model` configure the one-step provider fallback route
 - `SOUL.md` does not currently have config knobs; it is a first-run home-level file rather than a config-driven feature
 
 ### LLM Integration
@@ -123,18 +124,22 @@ Final Response
 - Tokens stream directly to stdout
 - Tool calls are accumulated silently, then dispatched after the streamed response finishes
 - OpenAI and OpenRouter are both treated as OpenAI-compatible providers
+- `astra_claw/llm.py` centralizes provider base URLs, API key lookup, route resolution, and transient-error classification
+- The agent tries the primary provider/model first, then retries once on the configured fallback provider/model when the primary fails before meaningful streamed output
+- Fallback only applies to transient/runtime failures such as timeouts, connection errors, 429s, and 5xx responses. Auth and malformed-request failures do not fail over.
 
 ## File Dependency Chain
 
 ```text
 constants.py       (no deps)
 config.py          (imports constants, soul)
+llm.py             (imports OpenAI SDK only)
 session.py         (imports constants)
 memory.py          (imports constants)
 soul.py            (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry; memory_tool also imports memory)
-agent/loop.py      (imports all of the above)
+agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
 __main__.py        (imports loop + session)
 ```
 
@@ -162,6 +167,7 @@ __main__.py        (imports loop + session)
 - `tests/test_session.py` covers JSONL session persistence and recovery behavior
 - `tests/test_memory.py` covers `MemoryStore` add/replace/remove, char limits, threat scanning, and frozen-snapshot stability
 - `tests/test_soul.py` covers first-run seeding, no-overwrite behavior, loading, fallback, threat blocking, and truncation
+- `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - The full suite is run with `python -m pytest tests -v`

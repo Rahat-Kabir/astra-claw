@@ -1,4 +1,4 @@
-# Astra-Claw — Development Guide
+# Astra-Claw - Development Guide
 
 Instructions for AI coding assistants and developers working on the astra-claw codebase.
 
@@ -12,66 +12,75 @@ Instructions for AI coding assistants and developers working on the astra-claw c
 ## Code Quality
 
 - **Fail Fast**: Do not swallow exceptions. Prefer crashing with a clear stack trace over silent failure. Only catch errors if you have a specific recovery plan.
-- **Senior Engineer Test**: Before writing, ask: 'Would a senior engineer delete this?' If yes, simplify.
+- **Senior Engineer Test**: Before writing, ask: "Would a senior engineer delete this?" If yes, simplify.
 - **Clean Up Orphans**: If you remove a function or variable, you MUST remove its unused imports and dependencies.
 
-##Global
+## Global
 
-- After adding a new file, tool, or feature, update README.md and the Project Structure section in this file to reflect the change
-- After code, update docs/tech_spec.md and docs/progress.md with the decisions made in the session
+- After adding a new file, tool, or feature, update `README.md` and the Project Structure section in this file to reflect the change.
+- After code, update `docs/tech_spec.md` and `docs/progress.md` with the decisions made in the session shortly also `docs/testing.md` if any.
 
 ## Workflow
 
-- **CLI First**: Every new feature should test in cli first before ui , create scripts/ or test/ using python
+- **CLI First**: Every new feature should test in CLI first before UI. Create `scripts/` or `tests/` using Python when needed.
 - **Visual Debugging**: If a UI issue is complex, ask for a screenshot.
 
 ```bash
-
 # ALWAYS activate before running Python
 
-.\venv\Scripts\Activate.ps1  # Windows PowerShell (right now ,I'm using Windows powershell)
+.\venv\Scripts\Activate.ps1  # Windows PowerShell
 # or
 source venv/bin/activate     # Git Bash / WSL
-
 ```
 
 ## Project Structure
 
-```
+```text
 astra-claw/
-├── astra_claw/
-│   ├── __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions)
-│   ├── constants.py          # get_astra_home() — single source of truth
-│   ├── config.py             # DEFAULT_CONFIG + deep merge + ensure home
-│   ├── session.py            # JSONL session persistence (create, save, load, list)
-│   ├── memory.py             # MemoryStore — frozen-snapshot persistent memory (MEMORY.md + USER.md)
-│   ├── soul.py               # SOUL.md loader — primary identity layer (seeded on first run, scanned + truncated)
-│   ├── agent/
-│   │   ├── loop.py           # AstraAgent class + run_conversation() → streaming + tool loop
-│   │   └── prompt_builder.py # system prompt assembly (injects memory snapshot)
-│   └── tools/
-│       ├── registry.py       # register(), get_definitions(), dispatch()
-│       ├── file_tools.py     # read_file, write_file (with blocked-path safety)
-│       ├── shell_tool.py     # shell command execution (with dangerous command approval)
-│       ├── search_tool.py    # search_files — content grep + filename find (cross-platform)
-│       └── memory_tool.py    # memory tool — schema + JSON wrapper over MemoryStore
-├── tests/
-│   └── test_features.py      # unit tests (pytest)
-├── pyproject.toml
-└── .env.example
+|-- astra_claw/
+|   |-- __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions)
+|   |-- constants.py          # get_astraclaw_home() - single source of truth
+|   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
+|   |-- llm.py                # provider routing, client creation, and transient fallback policy
+|   |-- session.py            # JSONL session persistence (create, save, load, list)
+|   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
+|   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
+|   |-- agent/
+|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop
+|   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
+|   `-- tools/
+|       |-- registry.py       # register(), get_definitions(), dispatch()
+|       |-- file_tools.py     # read_file, write_file (with blocked-path safety)
+|       |-- shell_tool.py     # shell command execution (with dangerous command approval)
+|       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
+|       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
+|-- tests/
+|   |-- agent/                # mocked agent loop tests
+|   |-- tools/                # tool-level tests (includes test_memory_tool.py)
+|   |-- test_features.py      # core regression tests
+|   |-- test_session.py       # session persistence tests
+|   |-- test_soul.py          # SOUL.md seeding / loading / fallback tests
+|   `-- test_memory.py        # MemoryStore tests
+|-- docs/
+|   |-- tech_spec.md          # technical design notes
+|   |-- progress.md           # implementation progress log
+|   `-- testing.md            # test commands and suite layout
+|-- pyproject.toml
+`-- .env.example
 ```
 
-**User data:** `~/.astraclaw/` (config, sessions, memory, skills — never in repo)
+**User data:** `~/.astraclaw/` (config, sessions, memory, skills - never in repo)
 
 ## File Dependency Chain
 
-```
+```text
 constants.py       (no deps)
 config.py          (imports constants)
+llm.py             (imports OpenAI SDK only)
 session.py         (imports constants)
-tools/registry.py  (imports constants — independent of config)
+tools/registry.py  (no deps)
 tools/*.py         (import registry)
-agent/loop.py      (imports ALL of the above)
+agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
 __main__.py        (imports loop + session)
 ```
 
@@ -84,12 +93,14 @@ __main__.py        (imports loop + session)
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
-- Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), `§`-delimited, char-limited.
-- The `memory` tool is special-cased in `agent/loop.py` to receive the agent's `MemoryStore`; standalone registry dispatch returns an unavailable-error JSON.
-- Memory content is scanned for prompt-injection / exfiltration / invisible-unicode before persisting.
-- Frozen snapshot: `load_from_disk()` runs once at agent init; the system prompt never changes mid-session. Snapshot refreshes on next session start.
-- Identity: `~/.astraclaw/SOUL.md`, seeded on first run, loaded as first system-prompt layer (falls back to `DEFAULT_IDENTITY`), scanned + truncated at 12k chars.
+- Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
+- The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
+- Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
+- Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
+- `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
+- `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
+- LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
 
-## Must follow
+## Must Follow
 
-- **Take permission** before editing take my permission
+- **Take permission** before editing.
