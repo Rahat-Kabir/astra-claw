@@ -1,36 +1,23 @@
-"""Astra-Claw agent loop — the brain.
+"""Astra-Claw agent loop - the brain.
 
-Core conversation loop: call LLM → check for tool calls → dispatch → repeat.
+Core conversation loop: call LLM -> check for tool calls -> dispatch -> repeat.
 """
 
 import json
-import os
 import sys
 from typing import Any, Dict, List, Optional
 
-from openai import OpenAI
-
 from ..config import load_config
+from ..llm import build_route, create_client, is_failover_worthy_error
 from ..memory import MemoryStore
 from .prompt_builder import build_system_prompt
 from ..tools.registry import registry
 
 # Import tool modules so they register themselves
 from ..tools import file_tools  # noqa: F401
-from ..tools import shell_tool  # noqa: F401
-from ..tools import search_tool  # noqa: F401
 from ..tools import memory_tool as memory_tool_module  # noqa: F401
-
-
-PROVIDER_BASE_URLS = {
-    "openai": "https://api.openai.com/v1",
-    "openrouter": "https://openrouter.ai/api/v1",
-}
-
-PROVIDER_KEY_ENV = {
-    "openai": "OPENAI_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-}
+from ..tools import search_tool  # noqa: F401
+from ..tools import shell_tool  # noqa: F401
 
 
 class AstraAgent:
@@ -41,7 +28,6 @@ class AstraAgent:
         model_config = self.config.get("model", {})
         tool_config = self.config.get("tools", {})
 
-        self.model = model_config.get("default", "gpt-4o-mini")
         self.max_turns = self.config.get("agent", {}).get("max_turns", 20)
         enabled_toolsets = tool_config.get("enabled_toolsets")
         self.enabled_toolsets = set(enabled_toolsets) if enabled_toolsets is not None else None
@@ -59,20 +45,91 @@ class AstraAgent:
         else:
             self.memory_store = None
 
-        # Create LLM client
-        provider = model_config.get("provider", "openai")
-        base_url = PROVIDER_BASE_URLS.get(provider, PROVIDER_BASE_URLS["openai"])
-        api_key = os.getenv(PROVIDER_KEY_ENV.get(provider, "OPENAI_API_KEY"), "")
+        self.primary_route = build_route(model_config, fallback=False)
+        self.fallback_route = build_route(model_config, fallback=True)
+        if self.fallback_route == self.primary_route:
+            self.fallback_route = None
 
-        if not api_key:
-            raise RuntimeError(
-                f"No API key found. Set {PROVIDER_KEY_ENV.get(provider)} environment variable."
-            )
-
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+        self._clients: Dict[str, Any] = {}
+        self._get_client(self.primary_route["provider"])
 
         # Collect tool schemas from registry
         self.tools = registry.get_definitions(enabled_toolsets=self.enabled_toolsets)
+
+    def _get_client(self, provider: str) -> Any:
+        if provider not in self._clients:
+            self._clients[provider] = create_client(provider)
+        return self._clients[provider]
+
+    def _call_stream(self, route: Dict[str, str], messages: List[Dict[str, Any]]) -> Any:
+        client = self._get_client(route["provider"])
+        return client.chat.completions.create(
+            model=route["model"],
+            messages=messages,
+            tools=self.tools if self.tools else None,
+            stream=True,
+        )
+
+    def _collect_stream_response(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> tuple[str, Optional[List[Dict[str, Any]]]]:
+        routes = [self.primary_route]
+        if self.fallback_route is not None:
+            routes.append(self.fallback_route)
+
+        last_error = None
+        for route_index, route in enumerate(routes):
+            content_parts = []
+            tool_calls_acc = {}
+            has_meaningful_output = False
+
+            try:
+                stream = self._call_stream(route, messages)
+                for chunk in stream:
+                    if not chunk.choices:
+                        continue
+
+                    delta = chunk.choices[0].delta
+
+                    if delta.content:
+                        has_meaningful_output = True
+                        content_parts.append(delta.content)
+                        if not tool_calls_acc:
+                            sys.stdout.write(delta.content)
+                            sys.stdout.flush()
+
+                    if delta.tool_calls:
+                        has_meaningful_output = True
+                        for tc_delta in delta.tool_calls:
+                            idx = tc_delta.index if tc_delta.index is not None else 0
+                            if idx not in tool_calls_acc:
+                                tool_calls_acc[idx] = {
+                                    "id": tc_delta.id or "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            entry = tool_calls_acc[idx]
+                            if tc_delta.id:
+                                entry["id"] = tc_delta.id
+                            if tc_delta.function:
+                                if tc_delta.function.name:
+                                    entry["function"]["name"] += tc_delta.function.name
+                                if tc_delta.function.arguments:
+                                    entry["function"]["arguments"] += tc_delta.function.arguments
+
+                full_content = "".join(content_parts) or ""
+                tool_calls_list = [tool_calls_acc[i] for i in sorted(tool_calls_acc)] if tool_calls_acc else None
+                return full_content, tool_calls_list
+            except Exception as exc:
+                last_error = exc
+                is_last_route = route_index == len(routes) - 1
+                if has_meaningful_output or is_last_route or not is_failover_worthy_error(exc):
+                    raise
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("No LLM route available.")
 
     def run_conversation(
         self,
@@ -107,53 +164,7 @@ class AstraAgent:
         while turn < self.max_turns:
             turn += 1
 
-            # Stream the response — tokens arrive one by one
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=self.tools if self.tools else None,
-                stream=True,
-            )
-
-            # Accumulate pieces from the stream
-            content_parts = []
-            tool_calls_acc = {}  # index -> {id, function: {name, arguments}}
-
-            for chunk in stream:
-                if not chunk.choices:
-                    continue
-
-                delta = chunk.choices[0].delta
-
-                # Text token — print immediately
-                if delta.content:
-                    content_parts.append(delta.content)
-                    if not tool_calls_acc:
-                        sys.stdout.write(delta.content)
-                        sys.stdout.flush()
-
-                # Tool call token — accumulate silently
-                if delta.tool_calls:
-                    for tc_delta in delta.tool_calls:
-                        idx = tc_delta.index if tc_delta.index is not None else 0
-                        if idx not in tool_calls_acc:
-                            tool_calls_acc[idx] = {
-                                "id": tc_delta.id or "",
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            }
-                        entry = tool_calls_acc[idx]
-                        if tc_delta.id:
-                            entry["id"] = tc_delta.id
-                        if tc_delta.function:
-                            if tc_delta.function.name:
-                                entry["function"]["name"] += tc_delta.function.name
-                            if tc_delta.function.arguments:
-                                entry["function"]["arguments"] += tc_delta.function.arguments
-
-            # Rebuild response from accumulated pieces
-            full_content = "".join(content_parts) or ""
-            tool_calls_list = [tool_calls_acc[i] for i in sorted(tool_calls_acc)] if tool_calls_acc else None
+            full_content, tool_calls_list = self._collect_stream_response(messages)
 
             # Append assistant message to history
             msg_dict = {"role": "assistant", "content": full_content}
@@ -162,7 +173,7 @@ class AstraAgent:
             messages.append(msg_dict)
             new_messages.append(msg_dict)
 
-            # No tool calls — we're done
+            # No tool calls - we're done
             if not tool_calls_list:
                 return full_content, new_messages
 
@@ -176,6 +187,7 @@ class AstraAgent:
 
                 if fn_name == "memory":
                     from ..tools.memory_tool import memory_tool
+
                     result = memory_tool(
                         action=fn_args.get("action", ""),
                         target=fn_args.get("target", "memory"),

@@ -37,11 +37,7 @@ class FakeChunk:
 
 
 class FakeCompletions:
-    """Returns predefined streams one call at a time.
-
-    AstraAgent calls `chat.completions.create(..., stream=True)` on every turn.
-    This fake returns the next prepared stream each time `create()` is called.
-    """
+    """Returns predefined streams one call at a time."""
 
     def __init__(self, streams):
         self._streams = list(streams)
@@ -64,6 +60,25 @@ class FakeClient:
         self.chat = FakeChat(streams)
 
 
+class FakeLlmError(Exception):
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class FailingCompletions:
+    def __init__(self, failures):
+        self._failures = list(failures)
+
+    def create(self, **kwargs):
+        raise self._failures.pop(0)
+
+
+class FailingClient:
+    def __init__(self, failures):
+        self.chat = types.SimpleNamespace(completions=FailingCompletions(failures))
+
+
 class TestAstraAgentLoop:
     def test_run_conversation_returns_plain_text_without_tool_calls(self):
         """Agent should return streamed text directly when no tool call is emitted."""
@@ -75,7 +90,7 @@ class TestAstraAgentLoop:
         ]
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
-            with patch("astra_claw.agent.loop.OpenAI", return_value=FakeClient(streams)):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
                 agent = AstraAgent()
                 text, new_messages = agent.run_conversation("hi")
 
@@ -103,13 +118,11 @@ class TestAstraAgentLoop:
                 )
             )
         ]
-        final_text_stream = [
-            FakeChunk(FakeDelta(content="Done reading file.")),
-        ]
+        final_text_stream = [FakeChunk(FakeDelta(content="Done reading file."))]
         streams = [tool_call_stream, final_text_stream]
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
-            with patch("astra_claw.agent.loop.OpenAI", return_value=FakeClient(streams)):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
                 with patch(
                     "astra_claw.agent.loop.registry.dispatch",
                     return_value='{"path": "README.md", "content": "example"}',
@@ -143,7 +156,6 @@ class TestAstraAgentLoop:
             {"role": "assistant", "content": "Done reading file."},
         ]
 
- 
     def test_run_conversation_uses_empty_args_when_tool_json_is_invalid(self):
         """Agent should fall back to {} when streamed tool arguments are invalid JSON."""
         tool_call_stream = [
@@ -155,20 +167,18 @@ class TestAstraAgentLoop:
                             call_id="call_bad_json",
                             function=FakeFunction(
                                 name="read_file",
-                                arguments='{"path": "README.md"',  # missing closing brace
+                                arguments='{"path": "README.md"',
                             ),
                         )
                     ]
                 )
             )
         ]
-        final_text_stream = [
-            FakeChunk(FakeDelta(content="Handled invalid args.")),
-        ]
+        final_text_stream = [FakeChunk(FakeDelta(content="Handled invalid args."))]
         streams = [tool_call_stream, final_text_stream]
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
-            with patch("astra_claw.agent.loop.OpenAI", return_value=FakeClient(streams)):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
                 with patch(
                     "astra_claw.agent.loop.registry.dispatch",
                     return_value='{"error": "No path provided"}',
@@ -205,12 +215,17 @@ class TestAstraAgentLoop:
         streams = [repeating_tool_stream, repeating_tool_stream]
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
-            with patch("astra_claw.agent.loop.OpenAI", return_value=FakeClient(streams)):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
                 with patch(
                     "astra_claw.agent.loop.registry.dispatch",
                     return_value='{"path": "README.md", "content": "example"}',
                 ):
-                    agent = AstraAgent(config={"model": {"default": "gpt-5.4-mini", "provider": "openai"}, "agent": {"max_turns": 2}})
+                    agent = AstraAgent(
+                        config={
+                            "model": {"default": "gpt-5.4-mini", "provider": "openai"},
+                            "agent": {"max_turns": 2},
+                        }
+                    )
                     text, new_messages = agent.run_conversation("loop forever")
 
         assert text == "Max turns reached. Agent stopped."
@@ -221,3 +236,66 @@ class TestAstraAgentLoop:
             "tool_call_id": "call_repeat",
             "content": '{"path": "README.md", "content": "example"}',
         }
+
+    def test_run_conversation_falls_back_on_transient_primary_error(self):
+        final_text_stream = [FakeChunk(FakeDelta(content="Recovered via fallback."))]
+        clients = {
+            "openai": FailingClient([FakeLlmError("connection reset by peer")]),
+            "openrouter": FakeClient([final_text_stream]),
+        }
+
+        with patch.dict(
+            "os.environ",
+            {"OPENAI_API_KEY": "test-key", "OPENROUTER_API_KEY": "fallback-key"},
+        ):
+            with patch(
+                "astra_claw.agent.loop.create_client",
+                side_effect=lambda provider: clients[provider],
+            ):
+                agent = AstraAgent()
+                text, new_messages = agent.run_conversation("hi")
+
+        assert text == "Recovered via fallback."
+        assert new_messages == [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "Recovered via fallback."},
+        ]
+
+    def test_run_conversation_does_not_fall_back_on_bad_request(self):
+        clients = {
+            "openai": FailingClient([FakeLlmError("bad request", status_code=400)]),
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch(
+                "astra_claw.agent.loop.create_client",
+                side_effect=lambda provider: clients[provider],
+            ):
+                agent = AstraAgent()
+                try:
+                    agent.run_conversation("hi")
+                    assert False, "Expected primary bad request to propagate."
+                except FakeLlmError as exc:
+                    assert exc.status_code == 400
+
+    def test_run_conversation_raises_when_fallback_client_creation_fails(self):
+        clients = {
+            "openai": FailingClient([FakeLlmError("timeout while connecting")]),
+        }
+
+        def create_client_side_effect(provider):
+            if provider == "openrouter":
+                raise RuntimeError("No API key found. Set OPENROUTER_API_KEY environment variable.")
+            return clients[provider]
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch(
+                "astra_claw.agent.loop.create_client",
+                side_effect=create_client_side_effect,
+            ):
+                agent = AstraAgent()
+                try:
+                    agent.run_conversation("hi")
+                    assert False, "Expected fallback client creation failure to propagate."
+                except RuntimeError as exc:
+                    assert "OPENROUTER_API_KEY" in str(exc)

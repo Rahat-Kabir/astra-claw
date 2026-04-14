@@ -21,6 +21,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "default": "gpt-5.4-mini",
         "provider": "openai",
         "fallback_provider": "openrouter",
+        "fallback_model": "gpt-5.4-mini",
     },
     "agent": {
         "max_turns": 20,

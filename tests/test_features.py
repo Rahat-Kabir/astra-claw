@@ -15,6 +15,7 @@ from unittest.mock import patch
 from astra_claw.agent.prompt_builder import build_system_prompt
 from astra_claw.config import DEFAULT_CONFIG, _deep_merge, ensure_astraclaw_home, load_config
 from astra_claw.constants import get_astraclaw_home
+from astra_claw.llm import build_route, is_failover_worthy_error
 from astra_claw.tools import file_tools  # noqa: F401
 from astra_claw.tools.registry import ToolRegistry
 from astra_claw.tools.registry import registry as global_registry
@@ -77,6 +78,7 @@ class TestConfig:
         with patch.dict(os.environ, {"ASTRACLAW_HOME": str(home)}):
             config = load_config()
             assert config["model"]["default"] == DEFAULT_CONFIG["model"]["default"]
+            assert config["model"]["fallback_model"] == DEFAULT_CONFIG["model"]["fallback_model"]
             assert config["agent"]["max_turns"] == DEFAULT_CONFIG["agent"]["max_turns"]
 
     def test_load_config_with_override(self, tmp_path):
@@ -226,3 +228,24 @@ class TestGlobalRegistry:
         """The global registry should have read_file after importing file_tools."""
         names = [d["function"]["name"] for d in global_registry.get_definitions()]
         assert "read_file" in names
+
+
+class FakeProviderError(Exception):
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class TestLlmHelpers:
+    def test_build_route_defaults_fallback_model_to_primary(self):
+        route = build_route(
+            {"default": "gpt-5.4-mini", "fallback_provider": "openrouter"},
+            fallback=True,
+        )
+        assert route == {"provider": "openrouter", "model": "gpt-5.4-mini"}
+
+    def test_failover_worthy_error_accepts_transient_status(self):
+        assert is_failover_worthy_error(FakeProviderError("rate limited", status_code=429)) is True
+
+    def test_failover_worthy_error_rejects_bad_request(self):
+        assert is_failover_worthy_error(FakeProviderError("bad request", status_code=400)) is False
