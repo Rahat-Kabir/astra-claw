@@ -1,55 +1,10 @@
 """File tools — read_file, write_file."""
 
 import json
-import os
 from pathlib import Path
 
-from ..constants import get_workspace_fence
+from .path_safety import atomic_write_text, inside_workspace_fence, is_write_blocked
 from .registry import registry
-
-
-# ---------------------------------------------------------------------------
-# Safety: paths the agent should never write to
-# ---------------------------------------------------------------------------
-
-BLOCKED_PATTERNS = [
-    ".env",
-    ".git",
-    "credentials",
-    "id_rsa",
-    "id_ed25519",
-    ".ssh",
-    ".aws",
-    ".gnupg",
-]
-
-
-def _is_write_blocked(filepath: Path) -> bool:
-    """Check if a path matches any blocked pattern."""
-    parts = filepath.resolve().parts
-    name = filepath.name
-    for pattern in BLOCKED_PATTERNS:
-        if pattern == name or pattern in parts:
-            return True
-    return False
-
-
-def _inside_fence(filepath: Path) -> bool:
-    """Return True when filepath resolves inside the active workspace fence."""
-    fence = get_workspace_fence()
-    try:
-        resolved = filepath.resolve()
-    except OSError:
-        return False
-    try:
-        return resolved.is_relative_to(fence)
-    except AttributeError:
-        # Python < 3.9 fallback (astra-claw targets 3.10+, kept defensive).
-        try:
-            resolved.relative_to(fence)
-            return True
-        except ValueError:
-            return False
 
 
 # ---------------------------------------------------------------------------
@@ -90,17 +45,15 @@ def write_file(args: dict) -> str:
     filepath = Path(path).expanduser()
 
     # Fence check — reject paths that escape the active workspace.
-    if not _inside_fence(filepath):
+    if not inside_workspace_fence(filepath):
         return json.dumps({"error": f"Write denied: '{path}' escapes workspace fence"})
 
     # Safety check
-    if _is_write_blocked(filepath):
+    if is_write_blocked(filepath):
         return json.dumps({"error": f"Write denied: '{path}' is a protected path"})
 
     try:
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        filepath.write_text(content, encoding="utf-8")
-        bytes_written = len(content.encode("utf-8"))
+        bytes_written = atomic_write_text(filepath, content)
         return json.dumps({"path": str(filepath), "bytes_written": bytes_written})
     except Exception as e:
         return json.dumps({"error": f"Failed to write file: {e}"})

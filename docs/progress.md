@@ -98,3 +98,15 @@
 - [x] `tests/test_workspace.py` - 7 tests (inside-ok, relative-escape-blocked, absolute-escape-blocked, no-fence-fallback, flag-sets-fence, bad-path-exits, flag-absent-noop)
 - [x] `tests/tools/test_file_tools.py` - autouse fixture points fence at `tmp_path` so existing write tests still pass
 - [x] Verified focused tests: `python -m pytest tests/test_workspace.py tests/tools/test_file_tools.py -v` -> 18 passed
+
+## v0.1.7 - Patch Tool (2026-04-15)
+
+### Completed
+
+- [x] `astra_claw/tools/path_safety.py` - shared write fence, protected path, and atomic write helpers
+- [x] `astra_claw/tools/patch_tool.py` - exact text replacement tool with `replace_all` and unified diff output
+- [x] `astra_claw/tools/file_tools.py` - `write_file` now uses shared atomic write safety
+- [x] `astra_claw/agent/loop.py` - imports `patch_tool` so it self-registers
+- [x] `astra_claw/agent/prompt_builder.py` - prompts the agent to prefer `patch` for targeted edits
+- [x] `tests/tools/test_patch_tool.py` - 10 focused patch tool tests
+- [x] Verified full suite: `python -m pytest tests -v` -> 115 passed

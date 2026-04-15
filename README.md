@@ -5,7 +5,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 ## What It Does
 
 - Conversational AI agent with a tool-calling loop
-- Reads and writes files via `read_file` and `write_file`
+- Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
 - Persists interactive sessions as JSONL transcripts
@@ -15,7 +15,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
 - Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
-- Workspace fence: `--workspace <path>` locks `write_file` to a single directory tree for safe sandbox testing
+- Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 
 ## Quick Start
 
@@ -85,7 +85,7 @@ Astra-Claw agent. Session: 2026-04-14_abcd1234
 Workspace: d:\PROJECT\sandbox
 ```
 
-`write_file` rejects any resolved path outside the workspace (relative escapes, absolute paths, or `~`). `read_file` and `shell` are not fenced and still run relative to the chdir'd cwd.
+`write_file` and `patch` reject any resolved path outside the workspace (relative escapes, absolute paths, or `~`). `read_file` and `shell` are not fenced and still run relative to the chdir'd cwd.
 
 ## Project Structure
 
@@ -104,7 +104,9 @@ astra-claw/
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # tool registry with toolsets and availability filtering
+|       |-- path_safety.py    # shared write fence, protected path, and atomic write helpers
 |       |-- file_tools.py     # read_file, write_file tools
+|       |-- patch_tool.py     # exact text replacement tool with diff output
 |       |-- shell_tool.py     # shell command execution
 |       |-- search_tool.py    # file search (content + filename)
 |       `-- memory_tool.py    # memory tool (add/replace/remove)

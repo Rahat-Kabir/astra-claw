@@ -14,7 +14,9 @@ When the user asks you to do something, use the tools available to you.
 Do not describe what you would do -- actually do it by calling the appropriate tool.
 
 Tool usage guidelines:
-- Use read_file/write_file for reading and writing files directly
+- Use read_file to inspect files
+- Use patch for targeted edits to existing files
+- Use write_file only for new files or deliberate full-file replacement
 - Use shell for everything else: listing directories, running scripts, git commands, searching, installing packages
 - When listing or finding files, use shell with recursive commands
 - Prefer dedicated file tools over shell for file read/write operations

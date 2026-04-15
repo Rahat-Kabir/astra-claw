@@ -50,7 +50,9 @@ astra-claw/
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
+|       |-- path_safety.py    # shared write fence, protected path, and atomic write helpers
 |       |-- file_tools.py     # read_file, write_file (with blocked-path safety)
+|       |-- patch_tool.py     # patch - exact text replacement with diff output
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
 |       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
@@ -90,6 +92,7 @@ __main__.py        (imports loop + session)
 - NEVER hardcode `~/.astraclaw` - use `get_astraclaw_home()` from `constants.py`.
 - All tool handlers MUST return a JSON string.
 - New tool = new file in `tools/` + `registry.register(name=..., toolset=..., ...)` at the bottom.
+- Use `patch` for targeted edits to existing files; use `write_file` for new files or deliberate full rewrites.
 - Tools may optionally provide a `check_fn` so unavailable tools are hidden from model schemas.
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
@@ -101,7 +104,7 @@ __main__.py        (imports loop + session)
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
 - LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
-- Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` rejects any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
+- Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` and `patch` reject any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
 
 ## Must Follow
 
