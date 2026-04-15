@@ -5,7 +5,7 @@ Core conversation loop: call LLM -> check for tool calls -> dispatch -> repeat.
 
 import json
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..config import load_config
 from ..llm import build_route, create_client, is_failover_worthy_error
@@ -74,6 +74,7 @@ class AstraAgent:
     def _collect_stream_response(
         self,
         messages: List[Dict[str, Any]],
+        stream_writer: Optional[Callable[[str], None]] = None,
     ) -> tuple[str, Optional[List[Dict[str, Any]]]]:
         routes = [self.primary_route]
         if self.fallback_route is not None:
@@ -97,8 +98,11 @@ class AstraAgent:
                         has_meaningful_output = True
                         content_parts.append(delta.content)
                         if not tool_calls_acc:
-                            sys.stdout.write(delta.content)
-                            sys.stdout.flush()
+                            if stream_writer is not None:
+                                stream_writer(delta.content)
+                            else:
+                                sys.stdout.write(delta.content)
+                                sys.stdout.flush()
 
                     if delta.tool_calls:
                         has_meaningful_output = True
@@ -136,6 +140,7 @@ class AstraAgent:
         self,
         user_message: str,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
+        stream_writer: Optional[Callable[[str], None]] = None,
     ) -> tuple:
         """Run a conversation with tool calling until completion.
 
@@ -165,7 +170,10 @@ class AstraAgent:
         while turn < self.max_turns:
             turn += 1
 
-            full_content, tool_calls_list = self._collect_stream_response(messages)
+            full_content, tool_calls_list = self._collect_stream_response(
+                messages,
+                stream_writer=stream_writer,
+            )
 
             # Append assistant message to history
             msg_dict = {"role": "assistant", "content": full_content}

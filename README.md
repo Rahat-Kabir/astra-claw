@@ -5,6 +5,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 ## What It Does
 
 - Conversational AI agent with a tool-calling loop
+- Light Rich/prompt_toolkit CLI with history, slash commands, and autocomplete
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
@@ -50,12 +51,16 @@ Interactive mode starts a new session and saves every turn:
 
 ```text
 $ python -m astra_claw
-Astra-Claw agent. Session: 2026-04-10_a1b2c3d4
-Type 'exit' to quit.
+╭──────────── Astra-Claw ────────────╮
+│ Session   2026-04-10_a1b2c3d4      │
+│ Commands  /help                    │
+╰────────────────────────────────────╯
 
-> hey
+astra> hey
 Hello! How can I help you?
 ```
+
+Built-in local commands: `/help`, `/sessions`, `/new`, `/exit`, `/quit`.
 
 Resume a session:
 
@@ -81,8 +86,11 @@ Lock the agent to a sandbox directory for safe testing:
 
 ```text
 $ python -m astra_claw --workspace d:/PROJECT/sandbox
-Astra-Claw agent. Session: 2026-04-14_abcd1234
-Workspace: d:\PROJECT\sandbox
+╭──────────── Astra-Claw ────────────╮
+│ Session   2026-04-14_abcd1234      │
+│ Workspace d:\PROJECT\sandbox       │
+│ Commands  /help                    │
+╰────────────────────────────────────╯
 ```
 
 `write_file` and `patch` reject any resolved path outside the workspace (relative escapes, absolute paths, or `~`). `read_file` and `shell` are not fenced and still run relative to the chdir'd cwd.
@@ -99,6 +107,10 @@ astra-claw/
 |   |-- session.py            # JSONL session persistence
 |   |-- memory.py             # MemoryStore - persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding
+|   |-- cli/
+|   |   |-- commands.py       # slash command registry + autocomplete
+|   |   |-- repl.py           # prompt_toolkit interactive loop
+|   |   `-- ui.py             # Rich output helpers
 |   |-- agent/
 |   |   |-- loop.py           # AstraAgent - core conversation loop
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
@@ -112,6 +124,7 @@ astra-claw/
 |       `-- memory_tool.py    # memory tool (add/replace/remove)
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
+|   |-- cli/                 # slash command and REPL tests
 |   |-- tools/               # tool-level tests
 |   |-- test_features.py     # core regression tests
 |   |-- test_soul.py         # SOUL.md seeding and loading tests

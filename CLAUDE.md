@@ -1,6 +1,7 @@
 # Astra-Claw - Development Guide
 
 Instructions for AI coding assistants and developers working on the astra-claw codebase.
+Treat this file like `AGENTS.md`: it is the project guide for assistant behavior and development rules.
 
 ## Core Principles
 
@@ -45,27 +46,34 @@ astra-claw/
 |   |-- session.py            # JSONL session persistence (create, save, load, list)
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
+|   |-- cli/
+|   |   |-- commands.py       # slash commands + prompt completion
+|   |   |-- repl.py           # prompt_toolkit interactive session loop
+|   |   `-- ui.py             # Rich banner/help/session/error rendering
 |   |-- agent/
-|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop
+|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming callback + tool loop
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
+|       |-- path_safety.py    # shared write fence, protected path, and atomic write helpers
 |       |-- file_tools.py     # read_file, write_file (with blocked-path safety)
+|       |-- patch_tool.py     # patch - exact text replacement with diff output
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
 |       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |-- tests/
-|   |-- agent/                # mocked agent loop tests
-|   |-- tools/                # tool-level tests (includes test_memory_tool.py)
-|   |-- test_features.py      # core regression tests
-|   |-- test_session.py       # session persistence tests
-|   |-- test_soul.py          # SOUL.md seeding / loading / fallback tests
-|   |-- test_workspace.py     # --workspace flag + write_file fence tests
-|   `-- test_memory.py        # MemoryStore tests
+|   |-- agent/               # mocked agent loop tests
+|   |-- cli/                 # CLI command/completion/REPL tests
+|   |-- tools/               # tool-level tests (includes test_memory_tool.py)
+|   |-- test_features.py     # core regression tests
+|   |-- test_session.py      # session persistence tests
+|   |-- test_soul.py         # SOUL.md seeding / loading / fallback tests
+|   |-- test_workspace.py    # --workspace flag + write_file fence tests
+|   `-- test_memory.py       # MemoryStore tests
 |-- docs/
-|   |-- tech_spec.md          # technical design notes
-|   |-- progress.md           # implementation progress log
-|   `-- testing.md            # test commands and suite layout
+|   |-- tech_spec.md         # technical design notes
+|   |-- progress.md          # implementation progress log
+|   `-- testing.md           # test commands and suite layout
 |-- pyproject.toml
 `-- .env.example
 ```
@@ -82,7 +90,8 @@ session.py         (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
-__main__.py        (imports loop + session)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit)
+__main__.py        (imports loop + cli + session)
 ```
 
 ## Rules
@@ -90,10 +99,12 @@ __main__.py        (imports loop + session)
 - NEVER hardcode `~/.astraclaw` - use `get_astraclaw_home()` from `constants.py`.
 - All tool handlers MUST return a JSON string.
 - New tool = new file in `tools/` + `registry.register(name=..., toolset=..., ...)` at the bottom.
+- Use `patch` for targeted edits to existing files; use `write_file` for new files or deliberate full rewrites.
 - Tools may optionally provide a `check_fn` so unavailable tools are hidden from model schemas.
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
+- `run_conversation()` accepts optional `stream_writer`; CLI/TUI output should use that instead of adding UI code inside the agent loop.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
@@ -101,7 +112,7 @@ __main__.py        (imports loop + session)
 - `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
 - LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
-- Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` rejects any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
+- Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` and `patch` reject any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
 
 ## Must Follow
 

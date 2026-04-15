@@ -16,8 +16,10 @@ from dotenv import load_dotenv
 load_dotenv()  # Load .env file before anything reads env vars
 
 from .agent.loop import AstraAgent
+from .cli.repl import run_interactive_repl
+from .cli.ui import CliUI
 from .constants import set_workspace_fence
-from .session import create_session, save_message, load_session, list_sessions
+from .session import create_session, load_session, list_sessions
 from .tools.shell_tool import set_approval_callback
 
 
@@ -65,14 +67,7 @@ def main():
 
     # --sessions flag: list recent sessions and exit
     if "--sessions" in sys.argv:
-        sessions = list_sessions()
-        if not sessions:
-            print("No sessions found.")
-            return
-        print("Recent sessions:\n")
-        for s in sessions[:10]:
-            print(f"  {s['id']}  ({s['created']})")
-        print(f"\nResume with: python -m astra_claw --session <id>")
+        CliUI().print_sessions(list_sessions())
         return
 
     agent = AstraAgent()
@@ -88,6 +83,7 @@ def main():
     session_id = None
     history = []
 
+    resumed = False
     if "--session" in sys.argv:
         idx = sys.argv.index("--session")
         if idx + 1 < len(sys.argv):
@@ -96,38 +92,18 @@ def main():
             if not history:
                 print(f"Session '{session_id}' not found or empty.")
                 return
-            print(f"Resumed session: {session_id}")
-            print(f"Loaded {len(history)} messages.\n")
+            resumed = True
 
     if not session_id:
         session_id = create_session()
-        print(f"Astra-Claw agent. Session: {session_id}")
-        if workspace is not None:
-            print(f"Workspace: {workspace}")
-        print("Type 'exit' to quit.\n")
 
-    while True:
-        try:
-            message = input("> ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nBye.")
-            break
-
-        if not message:
-            continue
-        if message.lower() in ("exit", "quit"):
-            print("Bye.")
-            break
-
-        response, new_messages = agent.run_conversation(message, conversation_history=history)
-        print()  # newline after streamed output
-
-        # Save all new messages (user + assistant + tool) to session
-        for msg in new_messages:
-            save_message(session_id, msg)
-
-        # Update in-memory history (exclude system prompt)
-        history.extend(new_messages)
+    run_interactive_repl(
+        agent=agent,
+        session_id=session_id,
+        history=history,
+        workspace=workspace,
+        resumed=resumed,
+    )
 
 
 if __name__ == "__main__":

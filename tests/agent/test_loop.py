@@ -100,6 +100,41 @@ class TestAstraAgentLoop:
             {"role": "assistant", "content": "Hello world"},
         ]
 
+    def test_run_conversation_streams_to_callback_when_provided(self):
+        """Agent should send streamed text through the caller-provided callback."""
+        streams = [
+            [
+                FakeChunk(FakeDelta(content="Hello")),
+                FakeChunk(FakeDelta(content=" callback")),
+            ]
+        ]
+        tokens = []
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
+                agent = AstraAgent()
+                text, _ = agent.run_conversation("hi", stream_writer=tokens.append)
+
+        assert text == "Hello callback"
+        assert tokens == ["Hello", " callback"]
+
+    def test_run_conversation_uses_stdout_when_no_callback(self, capsys):
+        """Agent should preserve the old stdout streaming behavior by default."""
+        streams = [
+            [
+                FakeChunk(FakeDelta(content="Hello")),
+                FakeChunk(FakeDelta(content=" stdout")),
+            ]
+        ]
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
+                agent = AstraAgent()
+                text, _ = agent.run_conversation("hi")
+
+        assert text == "Hello stdout"
+        assert capsys.readouterr().out == "Hello stdout"
+
     def test_run_conversation_executes_tool_call_then_returns_final_text(self):
         """Agent should dispatch a tool call, append the tool message, then continue."""
         tool_call_stream = [

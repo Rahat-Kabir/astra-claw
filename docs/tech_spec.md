@@ -7,6 +7,8 @@ User Input
     |
 __main__.py (parse args, create agent)
     |
+cli/repl.py (interactive mode only)
+    |
 AstraAgent.run_conversation()
     |
 System Prompt (prompt_builder.py)
@@ -80,6 +82,14 @@ Final Response
 - Without a callback, dangerous commands are blocked
 - The Windows shell hint now reflects `subprocess.run(..., shell=True)` behavior more precisely: Windows commands should remain `cmd`-compatible
 
+### CLI/TUI Layer
+
+- Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
+- Rich is used for light output: startup banner, help, session table, warnings, and errors
+- Slash commands (`/help`, `/sessions`, `/new`, `/exit`, `/quit`) are handled locally and are not sent to the LLM
+- `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
+- When no callback is provided, the agent keeps the old stdout streaming behavior
+
 ### Memory System
 
 - Storage: `~/.astraclaw/memory/MEMORY.md` (agent notes) and `USER.md` (user profile)
@@ -125,7 +135,7 @@ Final Response
 ### LLM Integration
 
 - Uses the `openai` Python SDK with `stream=True`
-- Tokens stream directly to stdout
+- Tokens stream through an optional caller-provided callback, with stdout fallback
 - Tool calls are accumulated silently, then dispatched after the streamed response finishes
 - OpenAI and OpenRouter are both treated as OpenAI-compatible providers
 - `astra_claw/llm.py` centralizes provider base URLs, API key lookup, route resolution, and transient-error classification
@@ -144,7 +154,8 @@ soul.py            (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry; memory_tool also imports memory)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
-__main__.py        (imports loop + session)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit)
+__main__.py        (imports loop + cli + session)
 ```
 
 ## Tech Stack
@@ -154,6 +165,8 @@ __main__.py        (imports loop + session)
 | Language | Python 3.11+ | Best LLM SDK support |
 | LLM SDK | `openai` | Works with OpenAI + OpenRouter through one client |
 | Config | PyYAML | Simple and human-readable |
+| CLI input | `prompt_toolkit` | History, completion, and better prompt behavior |
+| CLI output | Rich | Lightweight panels/tables/colors |
 | Tool calling | OpenAI function calling format | Standard schema format |
 | Sessions | JSONL files | Zero deps and easy debugging |
 | User data | `~/.astraclaw/` | Kept outside the repo |
@@ -174,6 +187,7 @@ __main__.py        (imports loop + session)
 - `tests/test_workspace.py` covers the `--workspace` flag and the write fence (inside-ok, relative escape blocked, absolute escape blocked, no-fence fallback, flag parsing, bad path exit)
 - `tests/tools/test_patch_tool.py` covers exact replacement, deletion, no-match, multi-match, `replace_all`, protected paths, workspace escapes, and schema registration
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
+- `tests/cli/` covers slash commands, completion, REPL routing, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - The full suite is run with `python -m pytest tests -v`

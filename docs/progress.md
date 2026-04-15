@@ -12,7 +12,7 @@
 - [x] `agent/loop.py` - `AstraAgent` class with tool-calling while loop
 - [x] `__main__.py` - interactive mode + one-shot mode
 - [x] `pyproject.toml` - package config with `astraclaw` CLI entry point
-- [x] `CLAUDE.md` - development guide for AI assistants
+- [x] `AGENTS.md` / `CLAUDE.md` style development guide for AI assistants
 - [x] `README.md` - project documentation
 - [x] `session.py` - JSONL session persistence (`create_session`, `save_message`, `load_session`, `list_sessions`)
 - [x] `loop.py` updated - `run_conversation()` returns `(text, new_messages)`
@@ -110,3 +110,15 @@
 - [x] `astra_claw/agent/prompt_builder.py` - prompts the agent to prefer `patch` for targeted edits
 - [x] `tests/tools/test_patch_tool.py` - 10 focused patch tool tests
 - [x] Verified full suite: `python -m pytest tests -v` -> 115 passed
+
+## v0.1.8 - Light TUI + Stream Callback (2026-04-15)
+
+### Completed
+
+- [x] Added `rich` and `prompt-toolkit` dependencies
+- [x] Added `astra_claw/cli/` for slash commands, prompt history/completion, Rich banner/help/session output, and REPL routing
+- [x] `astra_claw/agent/loop.py` now accepts optional `stream_writer(token)` while keeping stdout fallback
+- [x] `astra_claw/__main__.py` now delegates interactive mode to the CLI REPL
+- [x] Added `tests/cli/` plus stream callback coverage in agent loop tests
+- [x] Verified focused tests: `python -m pytest tests\cli tests\agent -v` -> 20 passed
+- [x] Verified full suite: `python -m pytest tests -v` -> 128 passed

@@ -1,6 +1,7 @@
 # Astra-Claw - Development Guide
 
 Instructions for AI coding assistants and developers working on the astra-claw codebase.
+Treat this file like `CLAUDE.md`: it is the project guide for assistant behavior and development rules.
 
 ## Core Principles
 
@@ -45,8 +46,12 @@ astra-claw/
 |   |-- session.py            # JSONL session persistence (create, save, load, list)
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
+|   |-- cli/
+|   |   |-- commands.py       # slash commands + prompt completion
+|   |   |-- repl.py           # prompt_toolkit interactive session loop
+|   |   `-- ui.py             # Rich banner/help/session/error rendering
 |   |-- agent/
-|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop
+|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming callback + tool loop
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
@@ -58,6 +63,7 @@ astra-claw/
 |       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
+|   |-- cli/                 # CLI command/completion/REPL tests
 |   |-- tools/               # tool-level tests (includes test_memory_tool.py)
 |   |-- test_features.py     # core regression tests
 |   |-- test_session.py      # session persistence tests
@@ -84,7 +90,8 @@ session.py         (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
-__main__.py        (imports loop + session)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit)
+__main__.py        (imports loop + cli + session)
 ```
 
 ## Rules
@@ -98,6 +105,7 @@ __main__.py        (imports loop + session)
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
 - `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
+- `run_conversation()` accepts optional `stream_writer`; CLI/TUI output should use that instead of adding UI code inside the agent loop.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
