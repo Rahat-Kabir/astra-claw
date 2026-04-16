@@ -1,8 +1,17 @@
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
-from astra_claw.session import create_session, save_message, load_session, list_sessions
+from astra_claw.session import (
+    archive_session,
+    create_session,
+    list_sessions,
+    load_session,
+    load_session_meta,
+    rewrite_session,
+    save_message,
+)
 
 
 class TestSession:
@@ -126,3 +135,59 @@ class TestSession:
             sessions = list_sessions()
 
             assert [s["id"] for s in sessions] == ["good"]
+
+    def test_load_session_meta_reads_only_first_line(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            save_message(session_id, {"role": "user", "content": "Hello"})
+
+            meta = load_session_meta(session_id)
+
+            assert meta["type"] == "meta"
+            assert meta["id"] == session_id
+
+    def test_archive_session_copies_existing_jsonl(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            save_message(session_id, {"role": "user", "content": "Hello"})
+
+            archive_path = archive_session(session_id, reason="compact")
+
+            assert archive_path.exists()
+            original = tmp_path / "sessions" / f"{session_id}.jsonl"
+            assert archive_path.read_text(encoding="utf-8") == original.read_text(encoding="utf-8")
+
+    def test_rewrite_session_replaces_messages_and_preserves_meta(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            save_message(session_id, {"role": "user", "content": "Hello"})
+            save_message(session_id, {"role": "assistant", "content": "Hi"})
+
+            rewrite_session(
+                session_id,
+                [{"role": "assistant", "content": "[CONTEXT COMPACTION]\nsummary"}],
+            )
+
+            path = Path(tmp_path) / "sessions" / f"{session_id}.jsonl"
+            lines = path.read_text(encoding="utf-8").splitlines()
+            meta = json.loads(lines[0])
+            rewritten = json.loads(lines[1])
+
+            assert meta["type"] == "meta"
+            assert meta["id"] == session_id
+            assert rewritten == {"role": "assistant", "content": "[CONTEXT COMPACTION]\nsummary"}
+
+    def test_rewrite_session_applies_meta_updates(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+
+            rewrite_session(
+                session_id,
+                [{"role": "assistant", "content": "summary"}],
+                meta_updates={"compactions": 1, "last_compacted_at": "2026-04-16T00:00:00"},
+            )
+
+            meta = load_session_meta(session_id)
+
+            assert meta["compactions"] == 1
+            assert meta["last_compacted_at"] == "2026-04-16T00:00:00"

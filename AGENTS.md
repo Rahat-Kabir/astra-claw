@@ -51,7 +51,8 @@ astra-claw/
 |   |   |-- repl.py           # prompt_toolkit interactive session loop
 |   |   `-- ui.py             # Rich banner/help/session/error rendering
 |   |-- agent/
-|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming callback + tool loop
+|   |   |-- context_compactor.py # persistent history compaction rules + token estimation
+|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming callback + tool loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
@@ -62,7 +63,7 @@ astra-claw/
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
 |       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |-- tests/
-|   |-- agent/               # mocked agent loop tests
+|   |-- agent/               # mocked agent loop tests (includes compaction coverage)
 |   |-- cli/                 # CLI command/completion/REPL tests
 |   |-- tools/               # tool-level tests (includes test_memory_tool.py)
 |   |-- test_features.py     # core regression tests
@@ -106,6 +107,8 @@ __main__.py        (imports loop + cli + session)
 - `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
 - `run_conversation()` accepts optional `stream_writer`; CLI/TUI output should use that instead of adding UI code inside the agent loop.
+- Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
+- `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.

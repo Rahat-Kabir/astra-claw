@@ -22,9 +22,19 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "provider": "openai",
         "fallback_provider": "openrouter",
         "fallback_model": "gpt-5.4-mini",
+        "context_window": 128000,
     },
     "agent": {
         "max_turns": 20,
+    },
+    "compression": {
+        "enabled": True,
+        "threshold_ratio": 0.80,
+        "reserve_tokens": 4000,
+        "keep_first_n": 2,
+        "keep_last_n": 6,
+        "max_passes": 2,
+        "summary_model": None,
     },
     "memory": {
         "enabled": True,

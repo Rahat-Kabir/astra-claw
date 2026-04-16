@@ -12,6 +12,7 @@ from ..llm import build_route, create_client, is_failover_worthy_error
 from ..memory import MemoryStore
 from .prompt_builder import build_system_prompt
 from ..tools.registry import registry
+from .context_compactor import CompactionConfig, CompactionOutcome, ContextCompactor
 
 # Import tool modules so they register themselves
 from ..tools import file_tools  # noqa: F401
@@ -28,6 +29,7 @@ class AstraAgent:
         self.config = config or load_config()
         model_config = self.config.get("model", {})
         tool_config = self.config.get("tools", {})
+        compression_config = self.config.get("compression", {})
 
         self.max_turns = self.config.get("agent", {}).get("max_turns", 20)
         enabled_toolsets = tool_config.get("enabled_toolsets")
@@ -56,38 +58,64 @@ class AstraAgent:
 
         # Collect tool schemas from registry
         self.tools = registry.get_definitions(enabled_toolsets=self.enabled_toolsets)
+        self.compactor = ContextCompactor(
+            CompactionConfig(
+                context_window=model_config.get("context_window", 128000),
+                threshold_ratio=compression_config.get("threshold_ratio", 0.80),
+                reserve_tokens=compression_config.get("reserve_tokens", 4000),
+                keep_first_n=compression_config.get("keep_first_n", 2),
+                keep_last_n=compression_config.get("keep_last_n", 6),
+                max_passes=compression_config.get("max_passes", 2),
+                summary_model=compression_config.get("summary_model"),
+            ),
+            tool_schemas=self.tools,
+        )
+        self.compression_enabled = compression_config.get("enabled", True)
+        self.last_compaction_outcome: Optional[CompactionOutcome] = None
+        self.last_replay_history: List[Dict[str, Any]] = []
 
     def _get_client(self, provider: str) -> Any:
         if provider not in self._clients:
             self._clients[provider] = create_client(provider)
         return self._clients[provider]
 
-    def _call_stream(self, route: Dict[str, str], messages: List[Dict[str, Any]]) -> Any:
+    def _call_stream(
+        self,
+        route: Dict[str, str],
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
         client = self._get_client(route["provider"])
+        kwargs = {
+            "model": route["model"],
+            "messages": messages,
+            "stream": True,
+        }
+        if tools:
+            kwargs["tools"] = tools
         return client.chat.completions.create(
-            model=route["model"],
-            messages=messages,
-            tools=self.tools if self.tools else None,
-            stream=True,
+            **kwargs,
         )
 
     def _collect_stream_response(
         self,
         messages: List[Dict[str, Any]],
         stream_writer: Optional[Callable[[str], None]] = None,
+        routes: Optional[List[Dict[str, str]]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
     ) -> tuple[str, Optional[List[Dict[str, Any]]]]:
-        routes = [self.primary_route]
-        if self.fallback_route is not None:
-            routes.append(self.fallback_route)
+        active_routes = list(routes) if routes is not None else [self.primary_route]
+        if routes is None and self.fallback_route is not None:
+            active_routes.append(self.fallback_route)
 
         last_error = None
-        for route_index, route in enumerate(routes):
+        for route_index, route in enumerate(active_routes):
             content_parts = []
             tool_calls_acc = {}
             has_meaningful_output = False
 
             try:
-                stream = self._call_stream(route, messages)
+                stream = self._call_stream(route, messages, tools=tools)
                 for chunk in stream:
                     if not chunk.choices:
                         continue
@@ -128,13 +156,108 @@ class AstraAgent:
                 return full_content, tool_calls_list
             except Exception as exc:
                 last_error = exc
-                is_last_route = route_index == len(routes) - 1
+                is_last_route = route_index == len(active_routes) - 1
                 if has_meaningful_output or is_last_route or not is_failover_worthy_error(exc):
                     raise
 
         if last_error is not None:
             raise last_error
         raise RuntimeError("No LLM route available.")
+
+    def _build_system_prompt_text(self) -> str:
+        return build_system_prompt(
+            memory_store=self.memory_store,
+            include_memory_hint=self.memory_store is not None,
+        )
+
+    def _summarize_for_compaction(
+        self,
+        messages_to_summarize: List[Dict[str, Any]],
+        previous_summary: Optional[str] = None,
+    ) -> str:
+        serialized_messages = "\n\n".join(_format_message_for_compaction_summary(message) for message in messages_to_summarize)
+        prompt_parts = [
+            "You are compressing prior conversation context for a coding agent.",
+            "Write a concise durable summary of facts needed for future turns.",
+            "Keep user goals, decisions, constraints, unresolved work, and important tool outcomes.",
+            "Do not invent facts. Do not include filler. Prefer short bullet points.",
+        ]
+        if previous_summary:
+            prompt_parts.append("Previous compacted summary:\n" + previous_summary)
+        prompt_parts.append("Conversation segment to compress:\n" + (serialized_messages or "(no messages)"))
+        summary_messages = [
+            {"role": "system", "content": "\n\n".join(prompt_parts)},
+            {"role": "user", "content": "Produce the updated compacted context summary now."},
+        ]
+
+        routes = None
+        if self.compactor.config.summary_model:
+            routes = [{
+                "provider": self.primary_route["provider"],
+                "model": self.compactor.config.summary_model,
+            }]
+
+        summary_text, _ = self._collect_stream_response(
+            summary_messages,
+            stream_writer=lambda _token: None,
+            routes=routes,
+            tools=None,
+        )
+        return summary_text.strip()
+
+    def _maybe_compact_history(
+        self,
+        conversation_history: Optional[List[Dict[str, Any]]],
+        *,
+        pending_user_message: Optional[str] = None,
+        force: bool = False,
+    ) -> tuple[List[Dict[str, Any]], Optional[CompactionOutcome]]:
+        history = list(conversation_history) if conversation_history else []
+        if not self.compression_enabled:
+            return history, None
+
+        system_prompt = self._build_system_prompt_text()
+        outcome = self.compactor.compact(
+            system_prompt=system_prompt,
+            history=history,
+            summarize_fn=self._summarize_for_compaction,
+            force=force or self.compactor.should_compact(
+                system_prompt=system_prompt,
+                history=history,
+                pending_user_message=pending_user_message,
+            ),
+        )
+        if outcome.did_compact:
+            return outcome.messages, outcome
+        return history, None
+
+    def compact_history(
+        self,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        *,
+        force: bool = True,
+    ) -> CompactionOutcome:
+        history = list(conversation_history) if conversation_history else []
+        compacted_history, outcome = self._maybe_compact_history(history, force=force)
+        if outcome is None:
+            outcome = CompactionOutcome(
+                did_compact=False,
+                messages=compacted_history,
+                summary_text="",
+                estimated_tokens_before=self.compactor.estimate_request_tokens(
+                    system_prompt=self._build_system_prompt_text(),
+                    history=history,
+                ),
+                estimated_tokens_after=self.compactor.estimate_request_tokens(
+                    system_prompt=self._build_system_prompt_text(),
+                    history=history,
+                ),
+                dropped_messages=0,
+                passes=0,
+            )
+        self.last_compaction_outcome = outcome if outcome.did_compact else None
+        self.last_replay_history = list(outcome.messages)
+        return outcome
 
     def run_conversation(
         self,
@@ -148,42 +271,59 @@ class AstraAgent:
         of all messages generated this turn (user + assistant + tool messages).
         This allows the caller to persist them without the agent knowing about sessions.
         """
-        messages = list(conversation_history) if conversation_history else []
-        messages.insert(
-            0,
-            {
-                "role": "system",
-                "content": build_system_prompt(
-                    memory_store=self.memory_store,
-                    include_memory_hint=self.memory_store is not None,
-                ),
-            },
+        self.last_compaction_outcome = None
+        self.last_replay_history = list(conversation_history) if conversation_history else []
+
+        history_messages = list(conversation_history) if conversation_history else []
+        history_messages, compaction_outcome = self._maybe_compact_history(
+            history_messages,
+            pending_user_message=user_message,
         )
+        if compaction_outcome is not None:
+            self.last_compaction_outcome = compaction_outcome
 
         user_msg = {"role": "user", "content": user_message}
-        messages.append(user_msg)
+        history_messages.append(user_msg)
 
         # Track new messages generated this turn (for session persistence)
         new_messages = [user_msg]
+        overflow_retried = False
 
         turn = 0
         while turn < self.max_turns:
             turn += 1
 
-            full_content, tool_calls_list = self._collect_stream_response(
-                messages,
-                stream_writer=stream_writer,
-            )
+            request_messages = [{"role": "system", "content": self._build_system_prompt_text()}, *history_messages]
+            try:
+                full_content, tool_calls_list = self._collect_stream_response(
+                    request_messages,
+                    stream_writer=stream_writer,
+                    tools=self.tools,
+                )
+            except Exception as exc:
+                if overflow_retried or not _is_context_overflow_error(exc):
+                    raise
+                compacted_history, overflow_outcome = self._maybe_compact_history(
+                    history_messages,
+                    force=True,
+                )
+                if overflow_outcome is None or compacted_history == history_messages:
+                    raise
+                history_messages = compacted_history
+                self.last_compaction_outcome = overflow_outcome
+                overflow_retried = True
+                continue
 
             # Append assistant message to history
             msg_dict = {"role": "assistant", "content": full_content}
             if tool_calls_list:
                 msg_dict["tool_calls"] = tool_calls_list
-            messages.append(msg_dict)
+            history_messages.append(msg_dict)
             new_messages.append(msg_dict)
 
             # No tool calls - we're done
             if not tool_calls_list:
+                self.last_replay_history = list(history_messages)
                 return full_content, new_messages
 
             # Execute each tool call
@@ -212,7 +352,40 @@ class AstraAgent:
                     "tool_call_id": tc["id"],
                     "content": result,
                 }
-                messages.append(tool_msg)
+                history_messages.append(tool_msg)
                 new_messages.append(tool_msg)
 
+        self.last_replay_history = list(history_messages)
         return "Max turns reached. Agent stopped.", new_messages
+
+
+def _is_context_overflow_error(exc: Exception) -> bool:
+    haystack = f"{exc.__class__.__name__} {exc}".lower()
+    markers = (
+        "context length",
+        "maximum context length",
+        "too many tokens",
+        "prompt is too long",
+        "context window",
+    )
+    return any(marker in haystack for marker in markers)
+
+
+def _format_message_for_compaction_summary(message: Dict[str, Any], max_chars: int = 1200) -> str:
+    role = message.get("role", "unknown")
+    parts = [f"role={role}"]
+
+    if role == "assistant" and message.get("tool_calls"):
+        tool_names = [call.get("function", {}).get("name", "") for call in message.get("tool_calls", [])]
+        parts.append("tool_calls=" + ", ".join(name for name in tool_names if name))
+    if role == "tool":
+        parts.append(f"tool_call_id={message.get('tool_call_id', '')}")
+
+    content = message.get("content", "")
+    if not isinstance(content, str):
+        content = json.dumps(content, ensure_ascii=False)
+    content = content.strip()
+    if len(content) > max_chars:
+        content = content[:max_chars] + "... [truncated]"
+    parts.append("content=" + content)
+    return "\n".join(parts)

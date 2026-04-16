@@ -6,10 +6,11 @@ First line is always a metadata entry (type: "meta").
 """
 
 import json
+import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from .constants import get_astraclaw_home
 
@@ -44,6 +45,29 @@ def create_session() -> str:
     return session_id
 
 
+def load_session_meta(session_id: str) -> Dict[str, Any]:
+    """Load only the metadata line for a session."""
+    path = _sessions_dir() / f"{session_id}.jsonl"
+    if not path.exists():
+        return {}
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            first_line = f.readline().strip()
+    except OSError:
+        return {}
+
+    if not first_line:
+        return {}
+
+    try:
+        meta = json.loads(first_line)
+    except json.JSONDecodeError:
+        return {}
+
+    return meta if meta.get("type") == "meta" else {}
+
+
 def save_message(session_id: str, message: Dict) -> None:
     """Append a single message to a session's JSONL file.
 
@@ -54,6 +78,46 @@ def save_message(session_id: str, message: Dict) -> None:
     path = _sessions_dir() / f"{session_id}.jsonl"
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def archive_session(session_id: str, *, reason: str) -> Path:
+    """Copy the current session file into the archive directory."""
+    source = _sessions_dir() / f"{session_id}.jsonl"
+    if not source.exists():
+        raise FileNotFoundError(f"Session not found: {session_id}")
+
+    archive_dir = _sessions_dir() / "archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    archive_path = archive_dir / f"{session_id}.{timestamp}.{reason}.jsonl"
+    shutil.copy2(source, archive_path)
+    return archive_path
+
+
+def rewrite_session(
+    session_id: str,
+    messages: List[Dict[str, Any]],
+    *,
+    meta_updates: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Rewrite a session atomically with preserved metadata."""
+    path = _sessions_dir() / f"{session_id}.jsonl"
+    meta = load_session_meta(session_id) or {
+        "type": "meta",
+        "id": session_id,
+        "created": datetime.now().isoformat(),
+    }
+    meta["type"] = "meta"
+    meta["id"] = session_id
+    if meta_updates:
+        meta.update(meta_updates)
+
+    temp_path = path.with_suffix(".jsonl.tmp")
+    with open(temp_path, "w", encoding="utf-8") as f:
+        f.write(json.dumps(meta, ensure_ascii=False) + "\n")
+        for message in messages:
+            f.write(json.dumps(message, ensure_ascii=False) + "\n")
+    temp_path.replace(path)
 
 
 def load_session(session_id: str) -> List[Dict]:
@@ -96,17 +160,13 @@ def list_sessions() -> List[Dict]:
 
     for path in sessions_dir.glob("*.jsonl"):
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                first_line = f.readline().strip()
-            if not first_line:
-                continue
-            meta = json.loads(first_line)
+            meta = load_session_meta(path.stem)
             if meta.get("type") == "meta":
                 sessions.append({
                     "id": meta.get("id", path.stem),
                     "created": meta.get("created", ""),
                 })
-        except (json.JSONDecodeError, OSError):
+        except OSError:
             continue
 
     sessions.sort(key=lambda s: s["created"], reverse=True)

@@ -16,6 +16,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
 - Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
+- Persistent context compaction for long sessions with manual `/compact` and automatic preflight compaction
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 
 ## Quick Start
@@ -60,7 +61,7 @@ astra> hey
 Hello! How can I help you?
 ```
 
-Built-in local commands: `/help`, `/sessions`, `/new`, `/exit`, `/quit`.
+Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/exit`, `/quit`.
 
 Resume a session:
 
@@ -112,7 +113,8 @@ astra-claw/
 |   |   |-- repl.py           # prompt_toolkit interactive loop
 |   |   `-- ui.py             # Rich output helpers
 |   |-- agent/
-|   |   |-- loop.py           # AstraAgent - core conversation loop
+|   |   |-- context_compactor.py # history compaction rules + token estimation
+|   |   |-- loop.py           # AstraAgent - core conversation loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # tool registry with toolsets and availability filtering
@@ -160,8 +162,16 @@ model:
   provider: openai
   fallback_provider: openrouter
   fallback_model: gpt-5.4-mini
+  context_window: 128000
 agent:
   max_turns: 30
+compression:
+  enabled: true
+  threshold_ratio: 0.8
+  reserve_tokens: 4000
+  keep_first_n: 2
+  keep_last_n: 6
+  max_passes: 2
 tools:
   enabled_toolsets:
     - filesystem
@@ -177,6 +187,8 @@ memory:
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.
 
 Fallback retries only apply to transient/runtime failures such as timeouts, connection errors, rate limits, and 5xx responses. Auth and bad-request errors do not fail over.
+
+Context compaction rewrites long interactive session transcripts after archiving the old JSONL, so resumed sessions replay the compacted history instead of the full original middle.
 
 ## Testing
 

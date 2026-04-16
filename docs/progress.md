@@ -122,3 +122,15 @@
 - [x] Added `tests/cli/` plus stream callback coverage in agent loop tests
 - [x] Verified focused tests: `python -m pytest tests\cli tests\agent -v` -> 20 passed
 - [x] Verified full suite: `python -m pytest tests -v` -> 128 passed
+
+## v0.1.9 - Context Compaction (2026-04-16)
+
+### Completed
+
+- [x] `astra_claw/agent/context_compactor.py` - persistent history compaction with protected head/tail windows, tool-pair preservation, summary reuse, and no-benefit rejection
+- [x] `astra_claw/agent/loop.py` - preflight compaction before model calls, one retry on context-overflow errors, and silent internal summary generation
+- [x] `astra_claw/session.py` - session metadata loading, archive copy creation, and full transcript rewrite for compacted sessions
+- [x] `astra_claw/cli/commands.py` / `cli/repl.py` / `cli/ui.py` - added `/compact`, compaction status output, and active-history replacement after manual or automatic compaction
+- [x] `astra_claw/config.py` - added `model.context_window` and `compression.*` defaults
+- [x] Added compaction-focused tests for agent, CLI, and session rewrite/archive behavior
+- [x] Verified full suite: `.\venv\Scripts\pytest.exe` -> 145 passed

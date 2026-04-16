@@ -11,7 +11,7 @@ def _completion_texts(text: str) -> list[str]:
 def test_command_registry_contains_core_commands():
     names = [command.name for command in COMMANDS]
 
-    assert names == ["/help", "/sessions", "/new", "/exit"]
+    assert names == ["/help", "/sessions", "/new", "/compact", "/exit"]
 
 
 def test_quit_alias_resolves_to_exit():

@@ -71,6 +71,20 @@ class CliUI:
     def print_success(self, message: str) -> None:
         self.console.print(f"[green]{message}[/green]")
 
+    def print_compaction_result(
+        self,
+        *,
+        estimated_tokens_before: int,
+        estimated_tokens_after: int,
+        dropped_messages: int,
+        passes: int,
+    ) -> None:
+        self.print_success(
+            "Compacted context: "
+            f"{estimated_tokens_before} -> {estimated_tokens_after} tokens, "
+            f"dropped {dropped_messages} messages across {passes} pass(es)."
+        )
+
     def stream_token(self, token: str) -> None:
         self.console.print(token, end="", markup=False, highlight=False)
 

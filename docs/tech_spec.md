@@ -29,6 +29,17 @@ Final Response
 - Each later line is a message with an auto-added `ts`
 - `ts` is stripped before messages are replayed to the model
 - JSONL was chosen over SQLite for zero dependencies and easy inspection
+- Manual or automatic compaction archives the old JSONL, then rewrites the session with the compacted transcript and updated compaction metadata
+
+### Context Compaction
+
+- `agent/context_compactor.py` estimates request size with a simple char-based heuristic over the system prompt, replay history, pending user input, and tool schemas
+- Compaction keeps the first protected turns and recent tail, then replaces the middle with one synthetic assistant summary message
+- Assistant tool-call messages stay attached to their matching tool results so tool history is not split across the compaction boundary
+- Repeated compaction folds the earlier synthetic summary into the next summary instead of stacking many summaries
+- If the compacted history is not smaller than the original estimate, the rewrite is discarded
+- `agent/loop.py` runs preflight compaction before the main model call and retries once on context-overflow errors after forcing compaction
+- Summary-generation calls are internal-only and must not stream tokens to the CLI
 
 ### Single Source of Truth for Paths
 
@@ -86,9 +97,10 @@ Final Response
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
 - Rich is used for light output: startup banner, help, session table, warnings, and errors
-- Slash commands (`/help`, `/sessions`, `/new`, `/exit`, `/quit`) are handled locally and are not sent to the LLM
+- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/exit`, `/quit`) are handled locally and are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior
+- `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
 
 ### Memory System
 
@@ -130,6 +142,7 @@ Final Response
 - Optional `tools.enabled_toolsets` can limit which tool families are exposed to the model
 - `memory.enabled`, `memory.user_profile_enabled`, `memory.memory_char_limit`, `memory.user_char_limit` control the memory system; the agent creates a `MemoryStore` if either `enabled` flag is true
 - `model.fallback_provider` and `model.fallback_model` configure the one-step provider fallback route
+- `model.context_window` and the `compression.*` keys configure compaction thresholds and protected history windows
 - `SOUL.md` does not currently have config knobs; it is a first-run home-level file rather than a config-driven feature
 
 ### LLM Integration
@@ -187,6 +200,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/test_workspace.py` covers the `--workspace` flag and the write fence (inside-ok, relative escape blocked, absolute escape blocked, no-fence fallback, flag parsing, bad path exit)
 - `tests/tools/test_patch_tool.py` covers exact replacement, deletion, no-match, multi-match, `replace_all`, protected paths, workspace escapes, and schema registration
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
+- `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
 - `tests/cli/` covers slash commands, completion, REPL routing, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls

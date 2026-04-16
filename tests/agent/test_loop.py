@@ -41,8 +41,10 @@ class FakeCompletions:
 
     def __init__(self, streams):
         self._streams = list(streams)
+        self.calls = []
 
     def create(self, **kwargs):
+        self.calls.append(kwargs)
         return self._streams.pop(0)
 
 
@@ -69,8 +71,10 @@ class FakeLlmError(Exception):
 class FailingCompletions:
     def __init__(self, failures):
         self._failures = list(failures)
+        self.calls = []
 
     def create(self, **kwargs):
+        self.calls.append(kwargs)
         raise self._failures.pop(0)
 
 
@@ -334,3 +338,164 @@ class TestAstraAgentLoop:
                     assert False, "Expected fallback client creation failure to propagate."
                 except RuntimeError as exc:
                     assert "OPENROUTER_API_KEY" in str(exc)
+
+    def test_run_conversation_preflight_compacts_when_threshold_exceeded(self):
+        summary_stream = [FakeChunk(FakeDelta(content="- keep working"))]
+        final_text_stream = [FakeChunk(FakeDelta(content="Compacted response."))]
+        client = FakeClient([summary_stream, final_text_stream])
+        history = [
+            {"role": "user", "content": "keep"},
+            {"role": "assistant", "content": "keep reply"},
+            {"role": "user", "content": "middle " * 80},
+            {"role": "assistant", "content": "middle reply " * 80},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent reply"},
+        ]
+        config = {
+            "model": {"default": "gpt-5.4-mini", "provider": "openai", "context_window": 200},
+            "agent": {"max_turns": 2},
+            "compression": {
+                "enabled": True,
+                "threshold_ratio": 0.50,
+                "reserve_tokens": 10,
+                "keep_first_n": 2,
+                "keep_last_n": 2,
+                "max_passes": 1,
+            },
+            "memory": {"enabled": False, "user_profile_enabled": False},
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=client):
+                agent = AstraAgent(config=config)
+                text, _ = agent.run_conversation("new question", conversation_history=history)
+
+        assert text == "Compacted response."
+        assert len(client.chat.completions.calls) == 2
+        summary_request = client.chat.completions.calls[0]
+        final_request = client.chat.completions.calls[1]
+        assert "tools" not in summary_request
+        assert any(
+            message.get("content", "").startswith("[CONTEXT COMPACTION]")
+            for message in final_request["messages"]
+            if isinstance(message.get("content"), str)
+        )
+        assert agent.last_compaction_outcome is not None
+        assert agent.last_replay_history[-1] == {"role": "assistant", "content": "Compacted response."}
+
+    def test_run_conversation_overflow_retry_compacts_and_recovers(self):
+        class OverflowThenSuccessCompletions:
+            def __init__(self):
+                self.calls = []
+                self._call_count = 0
+
+            def create(self, **kwargs):
+                self.calls.append(kwargs)
+                self._call_count += 1
+                if self._call_count == 1:
+                    raise FakeLlmError("maximum context length exceeded", status_code=400)
+                if self._call_count == 2:
+                    return [FakeChunk(FakeDelta(content="- compacted summary"))]
+                return [FakeChunk(FakeDelta(content="Recovered after compaction."))]
+
+        client = types.SimpleNamespace(chat=types.SimpleNamespace(completions=OverflowThenSuccessCompletions()))
+        history = [
+            {"role": "user", "content": "keep"},
+            {"role": "assistant", "content": "keep reply"},
+            {"role": "user", "content": "middle " * 80},
+            {"role": "assistant", "content": "middle reply " * 80},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent reply"},
+        ]
+        config = {
+            "model": {"default": "gpt-5.4-mini", "provider": "openai", "context_window": 10_000},
+            "agent": {"max_turns": 2},
+            "compression": {
+                "enabled": True,
+                "threshold_ratio": 0.95,
+                "reserve_tokens": 10,
+                "keep_first_n": 2,
+                "keep_last_n": 2,
+                "max_passes": 1,
+            },
+            "memory": {"enabled": False, "user_profile_enabled": False},
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=client):
+                agent = AstraAgent(config=config)
+                text, _ = agent.run_conversation("new question", conversation_history=history)
+
+        assert text == "Recovered after compaction."
+        assert len(client.chat.completions.calls) == 3
+        assert any(
+            message.get("content", "").startswith("[CONTEXT COMPACTION]")
+            for message in client.chat.completions.calls[2]["messages"]
+            if isinstance(message.get("content"), str)
+        )
+
+    def test_run_conversation_compacted_replay_history_keeps_current_turn_messages(self):
+        summary_stream = [FakeChunk(FakeDelta(content="- summary"))]
+        final_text_stream = [FakeChunk(FakeDelta(content="Final answer."))]
+        client = FakeClient([summary_stream, final_text_stream])
+        history = [
+            {"role": "user", "content": "keep"},
+            {"role": "assistant", "content": "keep reply"},
+            {"role": "user", "content": "middle " * 80},
+            {"role": "assistant", "content": "middle reply " * 80},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent reply"},
+        ]
+        config = {
+            "model": {"default": "gpt-5.4-mini", "provider": "openai", "context_window": 200},
+            "agent": {"max_turns": 2},
+            "compression": {
+                "enabled": True,
+                "threshold_ratio": 0.50,
+                "reserve_tokens": 10,
+                "keep_first_n": 2,
+                "keep_last_n": 2,
+                "max_passes": 1,
+            },
+            "memory": {"enabled": False, "user_profile_enabled": False},
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=client):
+                agent = AstraAgent(config=config)
+                _, new_messages = agent.run_conversation("new question", conversation_history=history)
+
+        assert agent.last_replay_history[-len(new_messages):] == new_messages
+
+    def test_compact_history_summary_generation_does_not_write_to_stdout(self, capsys):
+        summary_stream = [FakeChunk(FakeDelta(content="- summary"))]
+        client = FakeClient([summary_stream])
+        history = [
+            {"role": "user", "content": "keep"},
+            {"role": "assistant", "content": "keep reply"},
+            {"role": "user", "content": "middle " * 80},
+            {"role": "assistant", "content": "middle reply " * 80},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent reply"},
+        ]
+        config = {
+            "model": {"default": "gpt-5.4-mini", "provider": "openai", "context_window": 200},
+            "agent": {"max_turns": 2},
+            "compression": {
+                "enabled": True,
+                "threshold_ratio": 0.50,
+                "reserve_tokens": 10,
+                "keep_first_n": 2,
+                "keep_last_n": 2,
+                "max_passes": 1,
+            },
+            "memory": {"enabled": False, "user_profile_enabled": False},
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=client):
+                agent = AstraAgent(config=config)
+                outcome = agent.compact_history(history, force=True)
+
+        assert outcome.did_compact
+        assert capsys.readouterr().out == ""
