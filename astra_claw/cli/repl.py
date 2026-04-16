@@ -10,6 +10,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 
+from ..agent.events import AgentEvents
 from ..constants import get_astraclaw_home
 from ..session import (
     archive_session,
@@ -20,6 +21,7 @@ from ..session import (
     save_message,
 )
 from .commands import resolve_command, SlashCommandCompleter
+from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
 
 
@@ -115,11 +117,16 @@ def run_interactive_repl(
                 break
             continue
 
-        response, new_messages = agent.run_conversation(
-            message,
-            conversation_history=active_history,
-            stream_writer=cli_ui.stream_token,
-        )
+        events = _build_agent_events(cli_ui)
+        try:
+            response, new_messages = agent.run_conversation(
+                message,
+                conversation_history=active_history,
+                stream_writer=cli_ui.stream_token,
+                events=events,
+            )
+        finally:
+            cli_ui.stop_thinking()
         if response:
             cli_ui.newline()
 
@@ -144,6 +151,35 @@ def run_interactive_repl(
         for msg in new_messages:
             save_message_fn(active_session_id, msg)
         active_history.extend(new_messages)
+
+
+def _build_agent_events(cli_ui: CliUI) -> AgentEvents:
+    """Wire a CliUI into the three agent hooks for spinner + tool feedback."""
+
+    def on_thinking(active: bool) -> None:
+        if active:
+            cli_ui.start_thinking("Thinking")
+        else:
+            cli_ui.stop_thinking()
+
+    def on_tool_start(call_id: str, name: str, args: dict) -> None:
+        preview = build_tool_preview(name, args)
+        label = f"Running {name}"
+        if preview:
+            label += f" {preview}"
+        cli_ui.start_thinking(label)
+
+    def on_tool_complete(call_id: str, name: str, args: dict, result: str) -> None:
+        cli_ui.stop_thinking()
+        preview = build_tool_preview(name, args)
+        summary = summarize_tool_result(name, result)
+        cli_ui.print_tool_line(name, preview, summary)
+
+    return AgentEvents(
+        on_thinking=on_thinking,
+        on_tool_start=on_tool_start,
+        on_tool_complete=on_tool_complete,
+    )
 
 
 def _build_compaction_meta_updates(meta: dict) -> dict:

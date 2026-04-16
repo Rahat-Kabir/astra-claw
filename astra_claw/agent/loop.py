@@ -1,20 +1,27 @@
 """Astra-Claw agent loop - the brain.
 
-Core conversation loop: call LLM -> check for tool calls -> dispatch -> repeat.
+Orchestrates the conversation:
+- builds the system prompt
+- streams LLM responses (agent.streaming)
+- dispatches tool calls (agent.tool_runner)
+- persists memory and triggers compaction (agent.context_compactor)
+- emits optional UI events (agent.events)
 """
 
 import json
-import sys
 from typing import Any, Callable, Dict, List, Optional
 
 from ..config import load_config
 from ..llm import build_route, create_client, is_failover_worthy_error
 from ..memory import MemoryStore
-from .prompt_builder import build_system_prompt
-from ..tools.registry import registry
 from .context_compactor import CompactionConfig, CompactionOutcome, ContextCompactor
+from .events import AgentEvents
+from .prompt_builder import build_system_prompt
+from .streaming import collect_stream_response, is_context_overflow_error
+from .tool_runner import execute_tool_calls
+from ..tools.registry import registry
 
-# Import tool modules so they register themselves
+# Import tool modules so they register themselves at agent import time.
 from ..tools import file_tools  # noqa: F401
 from ..tools import memory_tool as memory_tool_module  # noqa: F401
 from ..tools import patch_tool  # noqa: F401
@@ -35,7 +42,6 @@ class AstraAgent:
         enabled_toolsets = tool_config.get("enabled_toolsets")
         self.enabled_toolsets = set(enabled_toolsets) if enabled_toolsets is not None else None
 
-        # Memory: load frozen snapshot once at agent init.
         memory_config = self.config.get("memory", {})
         memory_enabled = memory_config.get("enabled", False)
         user_profile_enabled = memory_config.get("user_profile_enabled", False)
@@ -56,7 +62,6 @@ class AstraAgent:
         self._clients: Dict[str, Any] = {}
         self._get_client(self.primary_route["provider"])
 
-        # Collect tool schemas from registry
         self.tools = registry.get_definitions(enabled_toolsets=self.enabled_toolsets)
         self.compactor = ContextCompactor(
             CompactionConfig(
@@ -79,85 +84,37 @@ class AstraAgent:
             self._clients[provider] = create_client(provider)
         return self._clients[provider]
 
-    def _call_stream(
+    def _run_one_stream(
         self,
-        route: Dict[str, str],
         messages: List[Dict[str, Any]],
+        *,
         tools: Optional[List[Dict[str, Any]]] = None,
-    ) -> Any:
-        client = self._get_client(route["provider"])
-        kwargs = {
-            "model": route["model"],
-            "messages": messages,
-            "stream": True,
-        }
-        if tools:
-            kwargs["tools"] = tools
-        return client.chat.completions.create(
-            **kwargs,
-        )
-
-    def _collect_stream_response(
-        self,
-        messages: List[Dict[str, Any]],
         stream_writer: Optional[Callable[[str], None]] = None,
+        on_thinking: Optional[Callable[[bool], None]] = None,
         routes: Optional[List[Dict[str, str]]] = None,
-        tools: Optional[List[Dict[str, Any]]] = None,
     ) -> tuple[str, Optional[List[Dict[str, Any]]]]:
+        """Run one streamed completion with optional fallback between routes."""
         active_routes = list(routes) if routes is not None else [self.primary_route]
         if routes is None and self.fallback_route is not None:
             active_routes.append(self.fallback_route)
 
-        last_error = None
+        last_error: Optional[Exception] = None
         for route_index, route in enumerate(active_routes):
-            content_parts = []
-            tool_calls_acc = {}
-            has_meaningful_output = False
-
             try:
-                stream = self._call_stream(route, messages, tools=tools)
-                for chunk in stream:
-                    if not chunk.choices:
-                        continue
-
-                    delta = chunk.choices[0].delta
-
-                    if delta.content:
-                        has_meaningful_output = True
-                        content_parts.append(delta.content)
-                        if not tool_calls_acc:
-                            if stream_writer is not None:
-                                stream_writer(delta.content)
-                            else:
-                                sys.stdout.write(delta.content)
-                                sys.stdout.flush()
-
-                    if delta.tool_calls:
-                        has_meaningful_output = True
-                        for tc_delta in delta.tool_calls:
-                            idx = tc_delta.index if tc_delta.index is not None else 0
-                            if idx not in tool_calls_acc:
-                                tool_calls_acc[idx] = {
-                                    "id": tc_delta.id or "",
-                                    "type": "function",
-                                    "function": {"name": "", "arguments": ""},
-                                }
-                            entry = tool_calls_acc[idx]
-                            if tc_delta.id:
-                                entry["id"] = tc_delta.id
-                            if tc_delta.function:
-                                if tc_delta.function.name:
-                                    entry["function"]["name"] += tc_delta.function.name
-                                if tc_delta.function.arguments:
-                                    entry["function"]["arguments"] += tc_delta.function.arguments
-
-                full_content = "".join(content_parts) or ""
-                tool_calls_list = [tool_calls_acc[i] for i in sorted(tool_calls_acc)] if tool_calls_acc else None
+                client = self._get_client(route["provider"])
+                full_content, tool_calls_list, has_meaningful_output = collect_stream_response(
+                    client,
+                    route,
+                    messages,
+                    tools=tools,
+                    stream_writer=stream_writer,
+                    on_thinking=on_thinking,
+                )
                 return full_content, tool_calls_list
             except Exception as exc:
                 last_error = exc
                 is_last_route = route_index == len(active_routes) - 1
-                if has_meaningful_output or is_last_route or not is_failover_worthy_error(exc):
+                if is_last_route or not is_failover_worthy_error(exc):
                     raise
 
         if last_error is not None:
@@ -175,7 +132,9 @@ class AstraAgent:
         messages_to_summarize: List[Dict[str, Any]],
         previous_summary: Optional[str] = None,
     ) -> str:
-        serialized_messages = "\n\n".join(_format_message_for_compaction_summary(message) for message in messages_to_summarize)
+        serialized_messages = "\n\n".join(
+            _format_message_for_compaction_summary(message) for message in messages_to_summarize
+        )
         prompt_parts = [
             "You are compressing prior conversation context for a coding agent.",
             "Write a concise durable summary of facts needed for future turns.",
@@ -197,11 +156,12 @@ class AstraAgent:
                 "model": self.compactor.config.summary_model,
             }]
 
-        summary_text, _ = self._collect_stream_response(
+        summary_text, _ = self._run_one_stream(
             summary_messages,
-            stream_writer=lambda _token: None,
-            routes=routes,
             tools=None,
+            stream_writer=lambda _token: None,
+            on_thinking=None,
+            routes=routes,
         )
         return summary_text.strip()
 
@@ -264,15 +224,19 @@ class AstraAgent:
         user_message: str,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
         stream_writer: Optional[Callable[[str], None]] = None,
+        *,
+        events: Optional[AgentEvents] = None,
     ) -> tuple:
         """Run a conversation with tool calling until completion.
 
-        Returns (final_text, new_messages) where new_messages is the list
-        of all messages generated this turn (user + assistant + tool messages).
-        This allows the caller to persist them without the agent knowing about sessions.
+        Returns (final_text, new_messages). `events` is an optional
+        AgentEvents bundle for CLI/TUI feedback; all hooks are no-ops when
+        absent.
         """
         self.last_compaction_outcome = None
         self.last_replay_history = list(conversation_history) if conversation_history else []
+
+        on_thinking = events.on_thinking if events is not None else None
 
         history_messages = list(conversation_history) if conversation_history else []
         history_messages, compaction_outcome = self._maybe_compact_history(
@@ -285,7 +249,6 @@ class AstraAgent:
         user_msg = {"role": "user", "content": user_message}
         history_messages.append(user_msg)
 
-        # Track new messages generated this turn (for session persistence)
         new_messages = [user_msg]
         overflow_retried = False
 
@@ -293,15 +256,19 @@ class AstraAgent:
         while turn < self.max_turns:
             turn += 1
 
-            request_messages = [{"role": "system", "content": self._build_system_prompt_text()}, *history_messages]
+            request_messages = [
+                {"role": "system", "content": self._build_system_prompt_text()},
+                *history_messages,
+            ]
             try:
-                full_content, tool_calls_list = self._collect_stream_response(
+                full_content, tool_calls_list = self._run_one_stream(
                     request_messages,
-                    stream_writer=stream_writer,
                     tools=self.tools,
+                    stream_writer=stream_writer,
+                    on_thinking=on_thinking,
                 )
             except Exception as exc:
-                if overflow_retried or not _is_context_overflow_error(exc):
+                if overflow_retried or not is_context_overflow_error(exc):
                     raise
                 compacted_history, overflow_outcome = self._maybe_compact_history(
                     history_messages,
@@ -314,61 +281,26 @@ class AstraAgent:
                 overflow_retried = True
                 continue
 
-            # Append assistant message to history
             msg_dict = {"role": "assistant", "content": full_content}
             if tool_calls_list:
                 msg_dict["tool_calls"] = tool_calls_list
             history_messages.append(msg_dict)
             new_messages.append(msg_dict)
 
-            # No tool calls - we're done
             if not tool_calls_list:
                 self.last_replay_history = list(history_messages)
                 return full_content, new_messages
 
-            # Execute each tool call
-            for tc in tool_calls_list:
-                fn_name = tc["function"]["name"]
-                try:
-                    fn_args = json.loads(tc["function"]["arguments"])
-                except json.JSONDecodeError:
-                    fn_args = {}
-
-                if fn_name == "memory":
-                    from ..tools.memory_tool import memory_tool
-
-                    result = memory_tool(
-                        action=fn_args.get("action", ""),
-                        target=fn_args.get("target", "memory"),
-                        content=fn_args.get("content"),
-                        old_text=fn_args.get("old_text"),
-                        store=self.memory_store,
-                    )
-                else:
-                    result = registry.dispatch(fn_name, fn_args)
-
-                tool_msg = {
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": result,
-                }
-                history_messages.append(tool_msg)
-                new_messages.append(tool_msg)
+            tool_messages = execute_tool_calls(
+                tool_calls_list,
+                memory_store=self.memory_store,
+                events=events,
+            )
+            history_messages.extend(tool_messages)
+            new_messages.extend(tool_messages)
 
         self.last_replay_history = list(history_messages)
         return "Max turns reached. Agent stopped.", new_messages
-
-
-def _is_context_overflow_error(exc: Exception) -> bool:
-    haystack = f"{exc.__class__.__name__} {exc}".lower()
-    markers = (
-        "context length",
-        "maximum context length",
-        "too many tokens",
-        "prompt is too long",
-        "context window",
-    )
-    return any(marker in haystack for marker in markers)
 
 
 def _format_message_for_compaction_summary(message: Dict[str, Any], max_chars: int = 1200) -> str:

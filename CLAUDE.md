@@ -48,11 +48,15 @@ astra-claw/
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
 |   |-- cli/
 |   |   |-- commands.py       # slash commands + prompt completion
-|   |   |-- repl.py           # prompt_toolkit interactive session loop
-|   |   `-- ui.py             # Rich banner/help/session/error rendering
+|   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
+|   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
+|   |   `-- ui.py             # Rich banner/help/session/error rendering + thinking spinner + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # persistent history compaction rules + token estimation
-|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming callback + tool loop + preflight compaction
+|   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
+|   |   |-- streaming.py      # one-stream iteration + on_thinking + context-overflow detection
+|   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
+|   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
 |       |-- registry.py       # register(), get_definitions(), dispatch()
@@ -90,8 +94,12 @@ llm.py             (imports OpenAI SDK only)
 session.py         (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry)
-agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit)
+agent/events.py    (no deps)
+agent/streaming.py (no agent-local deps)
+agent/tool_runner.py (imports memory, tools.memory_tool, tools.registry, agent.events)
+agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
+cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -106,6 +114,10 @@ __main__.py        (imports loop + cli + session)
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
 - `run_conversation()` accepts optional `stream_writer`; CLI/TUI output should use that instead of adding UI code inside the agent loop.
+- `run_conversation()` also accepts optional `events: AgentEvents` with `on_thinking` / `on_tool_start` / `on_tool_complete` hooks; all hooks are optional and missing hooks are no-ops, so non-CLI callers can skip it entirely.
+- Stream iteration lives in `agent/streaming.py` and the per-tool dispatch batch lives in `agent/tool_runner.py`; keep `agent/loop.py` focused on orchestration (system prompt + compaction + turn loop).
+- Compaction summary calls must pass `on_thinking=None` so the user's spinner only tracks user-facing turns.
+- CLI tool-call feedback logic belongs in `cli/tool_display.py` (pure) and `cli/ui.py` (Rich); do not print tool previews or summaries from inside the agent loop.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.

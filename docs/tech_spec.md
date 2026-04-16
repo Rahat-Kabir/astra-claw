@@ -96,11 +96,21 @@ Final Response
 ### CLI/TUI Layer
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
-- Rich is used for light output: startup banner, help, session table, warnings, and errors
+- Rich is used for light output: startup banner, help, session table, warnings, errors, and the live feedback spinner
 - Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/exit`, `/quit`) are handled locally and are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior
 - `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
+
+### Live Feedback Surface
+
+- `agent/events.py` defines `AgentEvents` (frozen dataclass) with three optional hooks: `on_thinking(active)`, `on_tool_start(call_id, name, args)`, `on_tool_complete(call_id, name, args, result)`
+- `run_conversation(..., events=None)` keeps the surface opt-in; any missing hook is a no-op and the agent behaves identically when called without events
+- `agent/streaming.py` fires `on_thinking(True)` before each streamed LLM call and `on_thinking(False)` on the first content or tool-call delta; compaction summary streams are called with `on_thinking=None` so the user's spinner only tracks user-facing turns
+- `agent/tool_runner.py` brackets every dispatch with `on_tool_start` / `on_tool_complete` and preserves the `memory` tool special-case that injects the agent's `MemoryStore`
+- `cli/tool_display.py` holds pure preview + summary helpers (no Rich deps): `build_tool_preview` picks the primary arg per tool (path, pattern, command, action+target) and `summarize_tool_result` parses the JSON result into a short human label (line counts, `+N -M` for patch, exit codes for shell, etc.)
+- `cli/ui.py` owns the Rich dots spinner via `start_thinking(label)` / `stop_thinking()` and renders one compact dim line per completed tool via `print_tool_line(name, preview, summary)`; errors show in red, no emoji
+- `cli/repl.py` builds an `AgentEvents` per turn, updates the spinner label to `Running <tool> <preview>` during dispatch, and wraps `run_conversation` in `try/finally` so the spinner always stops
 
 ### Memory System
 
@@ -166,8 +176,12 @@ memory.py          (imports constants)
 soul.py            (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry; memory_tool also imports memory)
-agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit)
+agent/events.py    (no deps)
+agent/streaming.py (no agent-local deps; iterates SDK stream + on_thinking)
+agent/tool_runner.py (imports memory, tools.memory_tool, tools.registry, events)
+agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
+cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -204,5 +218,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/cli/` covers slash commands, completion, REPL routing, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
+- `tests/agent/test_events.py` covers `AgentEvents` wiring: thinking toggles, tool start/complete ordering, `events=None` back-compat, and compaction silence
+- `tests/cli/test_tool_display.py` covers preview + summary helpers for all 6 tools plus error paths
 - The full suite is run with `python -m pytest tests -v`
 - Focused commands and suite layout live in `docs/testing.md`

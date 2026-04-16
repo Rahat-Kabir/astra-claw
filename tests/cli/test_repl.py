@@ -28,12 +28,13 @@ class FakeAgent:
         self.compact_outcome = None
         self.auto_compact_base_history = None
 
-    def run_conversation(self, message, conversation_history=None, stream_writer=None):
+    def run_conversation(self, message, conversation_history=None, stream_writer=None, *, events=None):
         history = list(conversation_history or [])
         self.calls.append({
             "message": message,
             "history": history,
             "stream_writer": stream_writer,
+            "events": events,
         })
         if stream_writer is not None:
             stream_writer("assistant response")

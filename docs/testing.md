@@ -26,6 +26,8 @@ python -m pytest tests/tools/test_patch_tool.py -v
 python -m pytest tests/tools/test_shell_tool.py -v
 python -m pytest tests/tools/test_search_tool.py -v
 python -m pytest tests/agent/test_loop.py -v
+python -m pytest tests/agent/test_events.py -v
+python -m pytest tests/cli/test_tool_display.py -v
 ```
 
 ## Test Layout
@@ -33,8 +35,9 @@ python -m pytest tests/agent/test_loop.py -v
 - `tests/test_features.py`: core regression tests for constants, config, registry, and prompt builder
 - `tests/test_soul.py`: SOUL.md seeding, loading, fallback, and truncation tests
 - `tests/agent/test_loop.py`: mocked loop tests, including provider fallback and stream callback behavior
+- `tests/agent/test_events.py`: `AgentEvents` hooks (thinking toggle, tool start/complete ordering, back-compat, compaction silence)
 - `tests/agent/test_context_compactor.py`: compaction budget, protected window, and summary reuse tests
-- `tests/cli/`: slash command, completion, and REPL routing tests
+- `tests/cli/`: slash command, completion, REPL routing, and tool-display preview/summary tests
 - `tests/test_session.py`: JSONL session persistence tests
 - `tests/tools/`: tool-level tests for file, patch, shell, search, and memory behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls

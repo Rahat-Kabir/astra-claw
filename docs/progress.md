@@ -123,6 +123,23 @@
 - [x] Verified focused tests: `python -m pytest tests\cli tests\agent -v` -> 20 passed
 - [x] Verified full suite: `python -m pytest tests -v` -> 128 passed
 
+## v0.2.0 - Live Feedback UI + Loop Split (2026-04-17)
+
+### Completed
+
+- [x] `astra_claw/agent/events.py` - `AgentEvents` dataclass with three optional hooks: `on_thinking`, `on_tool_start`, `on_tool_complete`
+- [x] `astra_claw/agent/streaming.py` - extracted `collect_stream_response` + `is_context_overflow_error` from the loop; fires `on_thinking(True)` before the stream and `on_thinking(False)` on the first content/tool-call delta
+- [x] `astra_claw/agent/tool_runner.py` - extracted `execute_tool_calls`; emits tool start/complete events around each dispatch while preserving the `memory` tool special-case
+- [x] `astra_claw/agent/loop.py` slimmed from 392 to 284 lines; `run_conversation` gained keyword `events: AgentEvents | None = None`
+- [x] `astra_claw/cli/tool_display.py` - pure `build_tool_preview(name, args)` + `summarize_tool_result(name, result)` helpers (no Rich deps)
+- [x] `astra_claw/cli/ui.py` - `start_thinking` / `stop_thinking` (Rich dots spinner, dim, no emoji) + `print_tool_line(name, preview, summary)` one-line compact renderer
+- [x] `astra_claw/cli/repl.py` - builds `AgentEvents` per turn via `_build_agent_events(cli_ui)`; spinner label updates to `Running <tool> <preview>` during dispatch; `try/finally` guarantees spinner stops
+- [x] Compaction summary calls explicitly pass no thinking callback so the user's spinner only tracks user-facing turns
+- [x] `tests/agent/test_events.py` - 4 tests (thinking toggles, tool start/complete ordering, `events=None` back-compat, compaction silence)
+- [x] `tests/cli/test_tool_display.py` - 18 tests covering preview + summary for all 6 tools plus error paths
+- [x] `scripts/smoke_feedback_ui.py` - manual visual smoke test of the feedback surface
+- [x] Verified full suite: `python -m pytest tests -q` -> 167 passed
+
 ## v0.1.9 - Context Compaction (2026-04-16)
 
 ### Completed

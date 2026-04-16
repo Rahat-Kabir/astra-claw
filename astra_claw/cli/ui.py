@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
+from rich.status import Status
 from rich.table import Table
 
 from .commands import COMMANDS, CommandDef
@@ -15,6 +17,7 @@ class CliUI:
 
     def __init__(self, console: Optional[Console] = None):
         self.console = console or Console()
+        self._status: Optional[Status] = None
 
     def print_banner(
         self,
@@ -90,3 +93,41 @@ class CliUI:
 
     def newline(self) -> None:
         self.console.print()
+
+    # --- Live feedback during agent work --------------------------------
+
+    def start_thinking(self, label: str = "Thinking") -> None:
+        """Show (or replace) a single dim dots spinner with `label`."""
+        self.stop_thinking()
+        self._status = self.console.status(
+            f"[dim]{escape(label)}[/dim]",
+            spinner="dots",
+            spinner_style="dim",
+        )
+        self._status.start()
+
+    def stop_thinking(self) -> None:
+        """Hide the current spinner if any. Safe to call repeatedly."""
+        if self._status is not None:
+            try:
+                self._status.stop()
+            finally:
+                self._status = None
+
+    def print_tool_line(
+        self,
+        name: str,
+        preview: str,
+        summary: Optional[str] = None,
+    ) -> None:
+        """Print one compact line summarizing a completed tool call."""
+        parts = [f"[cyan]{escape(name)}[/cyan]"]
+        if preview:
+            parts.append(f"[dim]{escape(preview)}[/dim]")
+        line = "[dim]>[/dim] " + "  ".join(parts)
+        if summary:
+            if summary.lower().startswith("error"):
+                line += f"  [red]({escape(summary)})[/red]"
+            else:
+                line += f"  [dim]({escape(summary)})[/dim]"
+        self.console.print(line)

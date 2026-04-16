@@ -18,6 +18,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
 - Persistent context compaction for long sessions with manual `/compact` and automatic preflight compaction
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
+- Live CLI feedback: dim dots spinner while thinking, one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
 
 ## Quick Start
 
@@ -110,10 +111,14 @@ astra-claw/
 |   |-- soul.py               # SOUL.md loader + first-run seeding
 |   |-- cli/
 |   |   |-- commands.py       # slash command registry + autocomplete
-|   |   |-- repl.py           # prompt_toolkit interactive loop
-|   |   `-- ui.py             # Rich output helpers
+|   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
+|   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
+|   |   `-- ui.py             # Rich output helpers + thinking spinner + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # history compaction rules + token estimation
+|   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
+|   |   |-- streaming.py      # stream iteration + on_thinking + context-overflow detection
+|   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
 |   |   |-- loop.py           # AstraAgent - core conversation loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
