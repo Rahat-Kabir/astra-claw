@@ -151,3 +151,12 @@
 - [x] `astra_claw/config.py` - added `model.context_window` and `compression.*` defaults
 - [x] Added compaction-focused tests for agent, CLI, and session rewrite/archive behavior
 - [x] Verified full suite: `.\venv\Scripts\pytest.exe` -> 145 passed
+
+## v0.2.1 - Prompt Layering Fix (2026-04-17)
+
+### Completed
+
+- [x] `astra_claw/agent/prompt_builder.py` - split `TOOL_POLICY` out of `DEFAULT_IDENTITY` so SOUL.md cannot drop tool rules
+- [x] `astra_claw/agent/prompt_builder.py` - memory hint auto-enables when `memory_store` is passed (flag now defaults to `None`)
+- [x] `astra_claw/agent/prompt_builder.py` - announces workspace fence in the prompt when `--workspace` is explicitly set
+- [x] Verified: `python -m pytest tests/test_soul.py tests/test_features.py tests/test_workspace.py` -> 43 passed

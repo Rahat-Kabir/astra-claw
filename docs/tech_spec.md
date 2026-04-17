@@ -124,7 +124,7 @@ Final Response
 - Content scanning rejects prompt-injection, exfiltration, and invisible-unicode payloads before persistence because entries are injected into the system prompt
 - Atomic writes via temp-file + `os.replace`; no file locking (single-user CLI)
 - The agent loop special-cases the `memory` tool so the handler receives the agent's `MemoryStore` instance. Standalone `registry.dispatch("memory", ...)` returns an unavailable-error JSON, keeping the registry contract uniform.
-- `build_system_prompt(memory_store, include_memory_hint)` injects user and memory blocks and, when memory is enabled, appends a short hint telling the model when to save
+- `build_system_prompt(memory_store, include_memory_hint=None)` layers: SOUL/identity -> `TOOL_POLICY` -> env + shell hint -> optional workspace-fence line (only when `--workspace` is explicitly set) -> memory hint (auto-on when `memory_store` is passed) -> user + memory blocks. `TOOL_POLICY` is a separate layer so SOUL.md cannot drop tool rules.
 
 ### SOUL.md Identity Layer
 
