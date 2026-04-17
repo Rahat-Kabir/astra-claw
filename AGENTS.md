@@ -65,7 +65,8 @@ astra-claw/
 |       |-- patch_tool.py     # patch - exact text replacement with diff output
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
-|       `-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
+|       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
+|       `-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
 |-- tests/
 |   |-- agent/               # mocked agent loop tests (includes compaction coverage)
 |   |-- cli/                 # CLI command/completion/REPL tests
@@ -94,7 +95,6 @@ llm.py             (imports OpenAI SDK only)
 session.py         (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry)
-agent/loop.py      (imports config, llm, memory, prompt_builder, registry)
 agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.registry, agent.events)
@@ -124,6 +124,7 @@ __main__.py        (imports loop + cli + session)
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
+- The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.

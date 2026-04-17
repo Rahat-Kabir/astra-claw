@@ -160,3 +160,14 @@
 - [x] `astra_claw/agent/prompt_builder.py` - memory hint auto-enables when `memory_store` is passed (flag now defaults to `None`)
 - [x] `astra_claw/agent/prompt_builder.py` - announces workspace fence in the prompt when `--workspace` is explicitly set
 - [x] Verified: `python -m pytest tests/test_soul.py tests/test_features.py tests/test_workspace.py` -> 43 passed
+
+## v0.2.2 - Todo / Planning Tool (2026-04-17)
+
+### Completed
+
+- [x] `astra_claw/tools/todo_tool.py` - `TodoStore` + `todo_tool()` + `TODO_SCHEMA`, toolset `planning`
+- [x] `astra_claw/agent/tool_runner.py` - special-cases `todo`, injects agent's `TodoStore`
+- [x] `astra_claw/agent/loop.py` - creates `self.todo_store` per session, passes it to `execute_tool_calls`, re-injects active items as a synthetic user message after compaction
+- [x] `astra_claw/cli/tool_display.py` - todo preview (`read` / `write N items` / `merge N items`) and summary (`X in progress / Y pending`)
+- [x] `tests/tools/test_todo_tool.py` + todo cases in `tests/cli/test_tool_display.py`
+- [x] Verified full suite: `python -m pytest -q` -> 186 passed (1 pre-existing shell-approval failure unrelated)

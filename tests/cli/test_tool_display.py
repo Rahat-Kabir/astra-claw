@@ -35,6 +35,23 @@ class TestBuildToolPreview:
             == "add user"
         )
 
+    def test_todo_read_when_no_todos(self):
+        assert build_tool_preview("todo", {}) == "read"
+
+    def test_todo_write_shows_count(self):
+        args = {"todos": [{"id": "1", "content": "a", "status": "pending"}]}
+        assert build_tool_preview("todo", args) == "write 1 item"
+
+    def test_todo_merge_verb(self):
+        args = {
+            "todos": [
+                {"id": "1", "content": "a", "status": "pending"},
+                {"id": "2", "content": "b", "status": "pending"},
+            ],
+            "merge": True,
+        }
+        assert build_tool_preview("todo", args) == "merge 2 items"
+
     def test_unknown_tool_falls_back_to_common_keys(self):
         assert build_tool_preview("weird_tool", {"query": "hello"}) == "hello"
 
@@ -80,6 +97,22 @@ class TestSummarizeToolResult:
     def test_memory_success_returns_ok(self):
         result = json.dumps({"success": True})
         assert summarize_tool_result("memory", result) == "ok"
+
+    def test_todo_empty_summary(self):
+        result = json.dumps({
+            "success": True,
+            "todos": [],
+            "summary": {"total": 0, "pending": 0, "in_progress": 0, "completed": 0, "cancelled": 0},
+        })
+        assert summarize_tool_result("todo", result) == "empty"
+
+    def test_todo_summary_mixed_statuses(self):
+        result = json.dumps({
+            "success": True,
+            "todos": [],
+            "summary": {"total": 3, "pending": 2, "in_progress": 1, "completed": 0, "cancelled": 0},
+        })
+        assert summarize_tool_result("todo", result) == "1 in progress / 2 pending"
 
     def test_non_json_result_is_truncated_oneline(self):
         assert summarize_tool_result("shell", "plain text") == "plain text"

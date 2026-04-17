@@ -20,6 +20,7 @@ from .prompt_builder import build_system_prompt
 from .streaming import collect_stream_response, is_context_overflow_error
 from .tool_runner import execute_tool_calls
 from ..tools.registry import registry
+from ..tools.todo_tool import TodoStore
 
 # Import tool modules so they register themselves at agent import time.
 from ..tools import file_tools  # noqa: F401
@@ -27,6 +28,7 @@ from ..tools import memory_tool as memory_tool_module  # noqa: F401
 from ..tools import patch_tool  # noqa: F401
 from ..tools import search_tool  # noqa: F401
 from ..tools import shell_tool  # noqa: F401
+from ..tools import todo_tool as todo_tool_module  # noqa: F401
 
 
 class AstraAgent:
@@ -53,6 +55,8 @@ class AstraAgent:
             self.memory_store.load_from_disk()
         else:
             self.memory_store = None
+
+        self.todo_store = TodoStore()
 
         self.primary_route = build_route(model_config, fallback=False)
         self.fallback_route = build_route(model_config, fallback=True)
@@ -188,7 +192,11 @@ class AstraAgent:
             ),
         )
         if outcome.did_compact:
-            return outcome.messages, outcome
+            messages = list(outcome.messages)
+            todo_note = self.todo_store.format_for_injection() if self.todo_store else None
+            if todo_note:
+                messages.append({"role": "user", "content": todo_note})
+            return messages, outcome
         return history, None
 
     def compact_history(
@@ -294,6 +302,7 @@ class AstraAgent:
             tool_messages = execute_tool_calls(
                 tool_calls_list,
                 memory_store=self.memory_store,
+                todo_store=self.todo_store,
                 events=events,
             )
             history_messages.extend(tool_messages)

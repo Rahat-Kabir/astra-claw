@@ -126,6 +126,16 @@ Final Response
 - The agent loop special-cases the `memory` tool so the handler receives the agent's `MemoryStore` instance. Standalone `registry.dispatch("memory", ...)` returns an unavailable-error JSON, keeping the registry contract uniform.
 - `build_system_prompt(memory_store, include_memory_hint=None)` layers: SOUL/identity -> `TOOL_POLICY` -> env + shell hint -> optional workspace-fence line (only when `--workspace` is explicitly set) -> memory hint (auto-on when `memory_store` is passed) -> user + memory blocks. `TOOL_POLICY` is a separate layer so SOUL.md cannot drop tool rules.
 
+### Todo / Planning Tool
+
+- Session-scoped `TodoStore` owned by the agent (one per session, not persisted to disk)
+- Single `todo` tool: pass `todos` to write, omit to read; every call returns the full list plus `{total, pending, in_progress, completed, cancelled}` summary counts
+- `merge=false` (default) replaces the whole list; `merge=true` updates items by id and appends new ones
+- Valid statuses: `pending` / `in_progress` / `completed` / `cancelled`; invalid values normalize to `pending`
+- Toolset: `planning`, so it can be disabled via `tools.enabled_toolsets` config
+- Same special-case pattern as `memory`: `agent/tool_runner.py` routes `fn_name == "todo"` to a handler with the store injected; standalone `registry.dispatch("todo", ...)` returns an unavailable-error JSON
+- `TodoStore.format_for_injection()` renders active (pending / in_progress) items; `_maybe_compact_history` in `agent/loop.py` appends that rendering as a synthetic user message after compaction so the plan survives context trimming
+
 ### SOUL.md Identity Layer
 
 - Storage: `~/.astraclaw/SOUL.md`
@@ -175,10 +185,10 @@ session.py         (imports constants)
 memory.py          (imports constants)
 soul.py            (imports constants)
 tools/registry.py  (no deps)
-tools/*.py         (import registry; memory_tool also imports memory)
+tools/*.py         (import registry; memory_tool also imports memory; todo_tool is self-contained)
 agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps; iterates SDK stream + on_thinking)
-agent/tool_runner.py (imports memory, tools.memory_tool, tools.registry, events)
+agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.registry, events)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
 cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)

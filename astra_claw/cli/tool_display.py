@@ -36,6 +36,17 @@ def build_tool_preview(name: str, args: Dict[str, Any]) -> str:
         action = args.get("action", "")
         target = args.get("target", "")
         return _oneline(f"{action} {target}".strip())
+    if name == "todo":
+        todos = args.get("todos")
+        if todos is None:
+            return "read"
+        merge = args.get("merge", False)
+        verb = "merge" if merge else "write"
+        try:
+            count = len(todos)
+        except TypeError:
+            count = 0
+        return _oneline(f"{verb} {count} item{'s' if count != 1 else ''}")
 
     for key in ("path", "query", "command", "name", "prompt"):
         if key in args:
@@ -101,6 +112,18 @@ def summarize_tool_result(name: str, result: str) -> Optional[str]:
         if data.get("success"):
             return "ok"
         return None
+
+    if name == "todo":
+        summary = data.get("summary") or {}
+        total = summary.get("total", 0)
+        if not total:
+            return "empty"
+        parts = []
+        for key in ("in_progress", "pending", "completed", "cancelled"):
+            n = summary.get(key, 0)
+            if n:
+                parts.append(f"{n} {key.replace('_', ' ')}")
+        return _oneline(" / ".join(parts) or f"{total} items", _SUMMARY_MAX)
 
     return None
 

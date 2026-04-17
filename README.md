@@ -9,6 +9,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
+- Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Persists interactive sessions as JSONL transcripts
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
@@ -128,7 +129,8 @@ astra-claw/
 |       |-- patch_tool.py     # exact text replacement tool with diff output
 |       |-- shell_tool.py     # shell command execution
 |       |-- search_tool.py    # file search (content + filename)
-|       `-- memory_tool.py    # memory tool (add/replace/remove)
+|       |-- memory_tool.py    # memory tool (add/replace/remove)
+|       `-- todo_tool.py      # session todo list (plan + track tasks)
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
 |   |-- cli/                 # slash command and REPL tests

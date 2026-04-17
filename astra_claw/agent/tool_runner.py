@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from ..memory import MemoryStore
 from ..tools.memory_tool import memory_tool
 from ..tools.registry import registry
+from ..tools.todo_tool import TodoStore, todo_tool
 from .events import AgentEvents
 
 
@@ -18,6 +19,7 @@ def execute_tool_calls(
     tool_calls: List[Dict[str, Any]],
     *,
     memory_store: Optional[MemoryStore],
+    todo_store: Optional[TodoStore] = None,
     events: Optional[AgentEvents] = None,
 ) -> List[Dict[str, Any]]:
     """Dispatch each tool call and return the tool-role messages."""
@@ -42,6 +44,12 @@ def execute_tool_calls(
                 content=fn_args.get("content"),
                 old_text=fn_args.get("old_text"),
                 store=memory_store,
+            )
+        elif fn_name == "todo":
+            result = todo_tool(
+                todos=fn_args.get("todos"),
+                merge=fn_args.get("merge", False),
+                store=todo_store,
             )
         else:
             result = registry.dispatch(fn_name, fn_args)
