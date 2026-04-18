@@ -10,7 +10,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
-- Persists interactive sessions as JSONL transcripts
+- Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles (daemon-thread, silent-fail)
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
 - Retries once on a fallback provider/model for transient LLM failures
@@ -120,6 +120,7 @@ astra-claw/
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
 |   |   |-- streaming.py      # stream iteration + on_thinking + context-overflow detection
 |   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
+|   |   |-- title_generator.py # auto-generates session titles on a daemon thread
 |   |   |-- loop.py           # AstraAgent - core conversation loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
@@ -189,6 +190,8 @@ memory:
   user_profile_enabled: true
   memory_char_limit: 2200
   user_char_limit: 1375
+session:
+  auto_title: true   # generate a short title after the first exchange
 ```
 
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.

@@ -6,11 +6,13 @@ from unittest.mock import patch
 from astra_claw.session import (
     archive_session,
     create_session,
+    get_session_title,
     list_sessions,
     load_session,
     load_session_meta,
     rewrite_session,
     save_message,
+    set_session_title,
 )
 
 
@@ -176,6 +178,50 @@ class TestSession:
             assert meta["type"] == "meta"
             assert meta["id"] == session_id
             assert rewritten == {"role": "assistant", "content": "[CONTEXT COMPACTION]\nsummary"}
+
+    def test_get_session_title_returns_none_when_unset(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            assert get_session_title(session_id) is None
+
+    def test_set_session_title_round_trip(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            save_message(session_id, {"role": "user", "content": "Hello"})
+            save_message(session_id, {"role": "assistant", "content": "Hi"})
+
+            set_session_title(session_id, "Greeting The User")
+
+            assert get_session_title(session_id) == "Greeting The User"
+            meta = load_session_meta(session_id)
+            assert meta["title"] == "Greeting The User"
+            assert "titled_at" in meta
+
+            messages = load_session(session_id)
+            assert messages == [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi"},
+            ]
+
+    def test_set_session_title_is_noop_for_missing_session(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            set_session_title("nope", "Whatever")
+            assert get_session_title("nope") is None
+
+    def test_list_sessions_includes_title(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            set_session_title(session_id, "My Topic")
+
+            sessions = list_sessions()
+            match = [s for s in sessions if s["id"] == session_id][0]
+            assert match["title"] == "My Topic"
+
+    def test_get_session_title_rejects_blank(self, tmp_path):
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            rewrite_session(session_id, [], meta_updates={"title": "   "})
+            assert get_session_title(session_id) is None
 
     def test_rewrite_session_applies_meta_updates(self, tmp_path):
         with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):

@@ -171,3 +171,23 @@
 - [x] `astra_claw/cli/tool_display.py` - todo preview (`read` / `write N items` / `merge N items`) and summary (`X in progress / Y pending`)
 - [x] `tests/tools/test_todo_tool.py` + todo cases in `tests/cli/test_tool_display.py`
 - [x] Verified full suite: `python -m pytest -q` -> 186 passed (1 pre-existing shell-approval failure unrelated)
+
+## v0.2.3 - Session Title Auto-generation (2026-04-18)
+
+### Completed
+
+- [x] `astra_claw/session.py` - `get_session_title` / `set_session_title`; `list_sessions` now exposes `title`
+- [x] `astra_claw/llm.py` - `complete_once()` non-streaming helper; auto-falls back from `max_completion_tokens` to legacy `max_tokens` so it works with both gpt-5.x and older models
+- [x] `astra_claw/agent/title_generator.py` - `generate_title` / `auto_title_session` / `maybe_auto_title`; fires on daemon thread after the first 1-2 exchanges, silent-fail on any error
+- [x] `astra_claw/config.py` - `session.auto_title: True` default; title model resolves from `compression.summary_model` -> `model.fallback_model` -> `model.default`
+- [x] `astra_claw/cli/repl.py` - schedules auto-title after each user-facing turn; joins pending title threads on exit (5s/thread) so daemon threads aren't killed mid-flight
+- [x] `astra_claw/cli/ui.py` - `/sessions` gets a Title column; banner shows title on resume
+- [x] `scripts/smoke_title.py` - synchronous smoke test with optional `--persist` and `--verbose`
+- [x] `tests/agent/test_title_generator.py` + `tests/test_session.py` + `tests/cli/test_repl.py` - 26 new tests
+- [x] Verified full suite: `python -m pytest tests -q` -> 212 passed (1 pre-existing shell-approval failure, unrelated)
+- [x] Verified end-to-end: session `2026-04-18_bbdd9cbf` auto-titled `"Greeting and Offer to Help"` from a live REPL run
+
+## Next
+
+- [ ] Clarify tool: a structured way for the agent to pause and ask one clarifying question instead of guessing when the request is ambiguous.
+- [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.

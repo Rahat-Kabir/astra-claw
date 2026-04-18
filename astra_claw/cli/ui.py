@@ -25,11 +25,14 @@ class CliUI:
         workspace: Optional[Path] = None,
         resumed: bool = False,
         loaded_messages: int = 0,
+        title: Optional[str] = None,
     ) -> None:
         grid = Table.grid(padding=(0, 2))
         grid.add_column(style="bold cyan")
         grid.add_column(style="dim")
         grid.add_row("Session", session_id)
+        if title:
+            grid.add_row("Title", title)
         if workspace is not None:
             grid.add_row("Workspace", str(workspace))
         if resumed:
@@ -53,16 +56,23 @@ class CliUI:
 
         self.console.print(Panel(table, title="Commands", border_style="cyan"))
 
-    def print_sessions(self, sessions: list[Mapping[str, str]], limit: int = 10) -> None:
+    def print_sessions(self, sessions: Iterable[Mapping[str, str]], limit: int = 10) -> None:
+        sessions = list(sessions)
         if not sessions:
             self.print_warning("No sessions found.")
             return
 
         table = Table(title="Recent Sessions")
         table.add_column("ID", style="cyan")
+        table.add_column("Title", style="bold")
         table.add_column("Created", style="dim")
         for session in sessions[:limit]:
-            table.add_row(session.get("id", ""), session.get("created", ""))
+            title = session.get("title", "") or "-"
+            table.add_row(
+                session.get("id", ""),
+                title,
+                session.get("created", ""),
+            )
         self.console.print(table)
 
     def print_error(self, message: str) -> None:

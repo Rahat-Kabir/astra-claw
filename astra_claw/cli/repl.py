@@ -11,6 +11,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 
 from ..agent.events import AgentEvents
+from ..agent.title_generator import maybe_auto_title
 from ..constants import get_astraclaw_home
 from ..session import (
     archive_session,
@@ -58,14 +59,68 @@ def run_interactive_repl(
     active_session_id = session_id
     prompt = prompt_session or build_prompt_session()
     cli_ui = ui or CliUI()
+    pending_title_threads: list = []
 
+    resumed_title = (
+        load_session_meta_fn(active_session_id).get("title") if resumed else None
+    )
     cli_ui.print_banner(
         session_id=active_session_id,
         workspace=workspace,
         resumed=resumed,
         loaded_messages=len(active_history),
+        title=resumed_title,
     )
 
+    try:
+        _run_loop(
+            agent=agent,
+            active_session_id=active_session_id,
+            active_history=active_history,
+            prompt=prompt,
+            cli_ui=cli_ui,
+            pending_title_threads=pending_title_threads,
+            create_session_fn=create_session_fn,
+            save_message_fn=save_message_fn,
+            list_sessions_fn=list_sessions_fn,
+            rewrite_session_fn=rewrite_session_fn,
+            archive_session_fn=archive_session_fn,
+            load_session_meta_fn=load_session_meta_fn,
+            patch_stdout_enabled=patch_stdout_enabled,
+        )
+    finally:
+        _join_title_threads(pending_title_threads, cli_ui)
+
+
+def _join_title_threads(threads: list, cli_ui: "CliUI", per_thread_timeout: float = 5.0) -> None:
+    """Wait briefly for in-flight auto-title threads so they can persist before exit."""
+    alive = [t for t in threads if t is not None and t.is_alive()]
+    if not alive:
+        return
+    cli_ui.start_thinking("Saving session titles")
+    try:
+        for t in alive:
+            t.join(timeout=per_thread_timeout)
+    finally:
+        cli_ui.stop_thinking()
+
+
+def _run_loop(
+    *,
+    agent,
+    active_session_id,
+    active_history,
+    prompt,
+    cli_ui,
+    pending_title_threads,
+    create_session_fn,
+    save_message_fn,
+    list_sessions_fn,
+    rewrite_session_fn,
+    archive_session_fn,
+    load_session_meta_fn,
+    patch_stdout_enabled,
+):
     while True:
         try:
             stdout_context = patch_stdout() if patch_stdout_enabled else nullcontext()
@@ -152,6 +207,16 @@ def run_interactive_repl(
             save_message_fn(active_session_id, msg)
         active_history.extend(new_messages)
 
+        title_thread = _maybe_schedule_auto_title(
+            agent=agent,
+            session_id=active_session_id,
+            user_message=message,
+            assistant_response=response or "",
+            history=active_history,
+        )
+        if title_thread is not None:
+            pending_title_threads.append(title_thread)
+
 
 def _build_agent_events(cli_ui: CliUI) -> AgentEvents:
     """Wire a CliUI into the three agent hooks for spinner + tool feedback."""
@@ -179,6 +244,46 @@ def _build_agent_events(cli_ui: CliUI) -> AgentEvents:
         on_thinking=on_thinking,
         on_tool_start=on_tool_start,
         on_tool_complete=on_tool_complete,
+    )
+
+
+def _maybe_schedule_auto_title(
+    *,
+    agent: Any,
+    session_id: str,
+    user_message: str,
+    assistant_response: str,
+    history: list[dict],
+):
+    """Fire the auto-title daemon after a user-facing turn, if eligible.
+
+    Returns the spawned Thread (so the REPL can join it on exit) or None.
+    """
+    config = getattr(agent, "config", {}) or {}
+    session_cfg = config.get("session", {}) or {}
+    if not session_cfg.get("auto_title", True):
+        return None
+    if not assistant_response:
+        return None
+
+    route = getattr(agent, "primary_route", None) or {}
+    provider = route.get("provider")
+    if not provider:
+        return None
+    summary_model = (config.get("compression", {}) or {}).get("summary_model")
+    model = summary_model or route.get("model")
+    if not model:
+        return None
+
+    user_msg_count = sum(1 for m in history if m.get("role") == "user")
+    return maybe_auto_title(
+        session_id,
+        user_message,
+        assistant_response,
+        user_msg_count=user_msg_count,
+        provider=provider,
+        model=model,
+        enabled=True,
     )
 
 

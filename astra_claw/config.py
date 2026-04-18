@@ -42,6 +42,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "memory_char_limit": 2200,
         "user_char_limit": 1375,
     },
+    "session": {
+        "auto_title": True,
+    },
 }
 
 

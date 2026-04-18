@@ -120,6 +120,34 @@ def rewrite_session(
     temp_path.replace(path)
 
 
+def get_session_title(session_id: str) -> Optional[str]:
+    """Return the session's title if one has been set, else None."""
+    title = load_session_meta(session_id).get("title")
+    if isinstance(title, str) and title.strip():
+        return title
+    return None
+
+
+def set_session_title(session_id: str, title: str) -> None:
+    """Persist a title onto the session's meta line.
+
+    Rewrites the JSONL atomically via rewrite_session. No-op if the session
+    doesn't exist.
+    """
+    path = _sessions_dir() / f"{session_id}.jsonl"
+    if not path.exists():
+        return
+    messages = load_session(session_id)
+    rewrite_session(
+        session_id,
+        messages,
+        meta_updates={
+            "title": title,
+            "titled_at": datetime.now().isoformat(),
+        },
+    )
+
+
 def load_session(session_id: str) -> List[Dict]:
     """Load all messages from a session, skipping the meta line.
 
@@ -165,6 +193,7 @@ def list_sessions() -> List[Dict]:
                 sessions.append({
                     "id": meta.get("id", path.stem),
                     "created": meta.get("created", ""),
+                    "title": meta.get("title", ""),
                 })
         except OSError:
             continue

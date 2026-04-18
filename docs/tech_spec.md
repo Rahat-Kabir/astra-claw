@@ -136,6 +136,19 @@ Final Response
 - Same special-case pattern as `memory`: `agent/tool_runner.py` routes `fn_name == "todo"` to a handler with the store injected; standalone `registry.dispatch("todo", ...)` returns an unavailable-error JSON
 - `TodoStore.format_for_injection()` renders active (pending / in_progress) items; `_maybe_compact_history` in `agent/loop.py` appends that rendering as a synthetic user message after compaction so the plan survives context trimming
 
+### Session Title Auto-generation
+
+- `astra_claw/agent/title_generator.py` generates a 3-5 word title from the first user/assistant exchange using a cheap, non-streaming LLM call (`llm.complete_once`)
+- Runs on a **daemon thread** after each user-facing turn when `user_msg_count <= 2`, so it never blocks the reply
+- Silent-fail by design: any exception (bad request, 401, timeout) returns `None` and the session simply stays untitled
+- Title resolves a model via: `compression.summary_model` -> `model.fallback_model` -> `model.default`; same provider as the primary route
+- Output cleanup: strips matching quotes, strips a leading `Title:` prefix, strips trailing `.!?,;:`, truncates to 80 chars with `...`
+- Storage: `title` + `titled_at` are written into the session's meta (line 1 of the JSONL) via `rewrite_session(..., meta_updates=...)`. One full-file atomic rewrite per session, once.
+- `session.get_session_title()` short-circuits so an already-titled session is never re-titled automatically (user-set titles are also preserved)
+- `cli/repl.py` tracks every spawned title thread in a `pending_title_threads` list and joins them with a 5s per-thread timeout on exit (inside a `try/finally` around the input loop) so daemon threads don't die with the process mid-API-call. The spinner shows `Saving session titles` during the join.
+- `llm.complete_once()` tries `max_completion_tokens` first (required by gpt-5.x and reasoning models) and falls back to legacy `max_tokens` on an `unsupported_parameter` error, so the helper is model-agnostic
+- Config: `session.auto_title: True` default; set to `False` to disable the feature entirely
+
 ### SOUL.md Identity Layer
 
 - Storage: `~/.astraclaw/SOUL.md`
@@ -189,6 +202,7 @@ tools/*.py         (import registry; memory_tool also imports memory; todo_tool 
 agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps; iterates SDK stream + on_thinking)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.registry, events)
+agent/title_generator.py (imports llm, session)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
 cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)
@@ -230,5 +244,6 @@ __main__.py        (imports loop + cli + session)
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - `tests/agent/test_events.py` covers `AgentEvents` wiring: thinking toggles, tool start/complete ordering, `events=None` back-compat, and compaction silence
 - `tests/cli/test_tool_display.py` covers preview + summary helpers for all 6 tools plus error paths
+- `tests/agent/test_title_generator.py` covers title cleanup (quotes, prefix, truncation), silent-fail on exception, skip when already titled, daemon-thread wiring, and the `user_msg_count <= 2` gate
 - The full suite is run with `python -m pytest tests -v`
 - Focused commands and suite layout live in `docs/testing.md`

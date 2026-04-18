@@ -43,6 +43,42 @@ def build_route(model_config: Dict[str, Any], fallback: bool = False) -> Optiona
     return {"provider": provider, "model": model}
 
 
+def complete_once(
+    messages: list,
+    *,
+    provider: str,
+    model: str,
+    max_tokens: int = 30,
+    temperature: float = 0.3,
+    timeout: float = 30.0,
+) -> str:
+    """Run a single non-streaming chat completion and return the text.
+
+    Handles both the legacy `max_tokens` parameter and the newer
+    `max_completion_tokens` required by reasoning / gpt-5.x models.
+    """
+    client = create_client(provider)
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_completion_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        if "max_completion_tokens" not in str(exc):
+            raise
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            timeout=timeout,
+        )
+    return (resp.choices[0].message.content or "").strip()
+
+
 def is_failover_worthy_error(exc: Exception) -> bool:
     """Return True only for transient/runtime failures worth retrying on fallback."""
     status_code = getattr(exc, "status_code", None)

@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import patch
 
 from rich.console import Console
 
@@ -246,3 +247,85 @@ def test_auto_compaction_rewrites_session_before_saving_new_messages():
         ("session-1", {"role": "user", "content": "hello"}),
         ("session-1", {"role": "assistant", "content": "assistant response"}),
     ]
+
+
+class TitleAgent(FakeAgent):
+    def __init__(self):
+        super().__init__()
+        self.config = {
+            "session": {"auto_title": True},
+            "compression": {"summary_model": None},
+        }
+        self.primary_route = {"provider": "openai", "model": "gpt-x"}
+
+
+def test_auto_title_fires_after_first_exchange():
+    agent = TitleAgent()
+    ui, _ = _ui_and_output()
+    calls = []
+
+    with patch(
+        "astra_claw.cli.repl.maybe_auto_title",
+        side_effect=lambda *args, **kwargs: calls.append((args, kwargs)),
+    ):
+        run_interactive_repl(
+            agent=agent,
+            session_id="session-1",
+            prompt_session=FakePromptSession(["hello", "/exit"]),
+            ui=ui,
+            save_message_fn=lambda session_id, message: None,
+            patch_stdout_enabled=False,
+        )
+
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args[0] == "session-1"
+    assert args[1] == "hello"
+    assert args[2] == "assistant response"
+    assert kwargs["provider"] == "openai"
+    assert kwargs["model"] == "gpt-x"
+    assert kwargs["user_msg_count"] == 1
+
+
+def test_auto_title_skipped_when_config_disables_it():
+    agent = TitleAgent()
+    agent.config["session"]["auto_title"] = False
+    ui, _ = _ui_and_output()
+    calls = []
+
+    with patch(
+        "astra_claw.cli.repl.maybe_auto_title",
+        side_effect=lambda *args, **kwargs: calls.append(args),
+    ):
+        run_interactive_repl(
+            agent=agent,
+            session_id="session-1",
+            prompt_session=FakePromptSession(["hello", "/exit"]),
+            ui=ui,
+            save_message_fn=lambda session_id, message: None,
+            patch_stdout_enabled=False,
+        )
+
+    assert calls == []
+
+
+def test_auto_title_uses_summary_model_when_set():
+    agent = TitleAgent()
+    agent.config["compression"]["summary_model"] = "cheap-model"
+    ui, _ = _ui_and_output()
+    calls = []
+
+    with patch(
+        "astra_claw.cli.repl.maybe_auto_title",
+        side_effect=lambda *args, **kwargs: calls.append(kwargs),
+    ):
+        run_interactive_repl(
+            agent=agent,
+            session_id="session-1",
+            prompt_session=FakePromptSession(["hello", "/exit"]),
+            ui=ui,
+            save_message_fn=lambda session_id, message: None,
+            patch_stdout_enabled=False,
+        )
+
+    assert calls[0]["model"] == "cheap-model"
