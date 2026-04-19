@@ -20,6 +20,9 @@ Treat this file like `AGENTS.md`: it is the project guide for assistant behavior
 
 - After adding a new file, tool, or feature, update `README.md` and the Project Structure section in this file to reflect the change.
 - After code, update `docs/tech_spec.md` and `docs/progress.md` with the decisions made in the session shortly also `docs/testing.md` if any.
+- `docs/progress.md` is the per-feature dev log — one entry per completed `vX.Y.Z`, with a one-line `Why:`. Append every change here.
+- `docs/RELEASE_v0.X.md` is a themed chapter summary — write one **only** when the middle version number bumps (e.g. first `v0.3.0` ships). It groups the `v0.X.0 → v0.X.N` entries from `progress.md` under user-facing highlights. Once written, a release file is frozen — never edit old ones, only add new ones.
+- Bump the middle version (`0.X.0`) when starting a new theme/chapter, not for every feature. Bump the patch version (`0.X.Y`) for each feature within the chapter.
 
 ## Workflow
 
