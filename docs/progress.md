@@ -187,7 +187,32 @@
 - [x] Verified full suite: `python -m pytest tests -q` -> 212 passed (1 pre-existing shell-approval failure, unrelated)
 - [x] Verified end-to-end: session `2026-04-18_bbdd9cbf` auto-titled `"Greeting and Offer to Help"` from a live REPL run
 
+## v0.2.4 - Clarify Tool (2026-04-19)
+
+Why: give the agent a structured way to pause and ask one question instead of guessing on ambiguous requests.
+
+### Completed
+
+- [x] `astra_claw/tools/clarify_tool.py` - `CLARIFY_SCHEMA` + `clarify_tool(question, choices, callback)`, toolset `clarify`; handler is a thin shell that delegates to a platform callback
+- [x] `astra_claw/agent/tool_runner.py` - `clarify` branch injects `clarify_callback` (same pattern as `memory` / `todo`)
+- [x] `astra_claw/agent/loop.py` - `run_conversation` gains `clarify_callback` kwarg; imports clarify module for registry side-effect
+- [x] `astra_claw/cli/repl.py` - `_build_clarify_callback(cli_ui, prompt_session)` stops the spinner, renders the question, reads one line; numeric in-range resolves to choice text, everything else returned verbatim
+- [x] `astra_claw/cli/ui.py` - `print_clarify_question` renders question + numbered choices (auto-appends "Other")
+- [x] `astra_claw/cli/tool_display.py` - clarify preview (question) and summary (user_response)
+- [x] `astra_claw/agent/prompt_builder.py` - one `TOOL_POLICY` line guiding when to use clarify
+- [x] `tests/tools/test_clarify_tool.py` - 11 tests (schema, validation, trimming, callback injection, exception wrapping, standalone-registry error)
+- [x] `tests/agent/test_tool_runner_clarify.py` - 3 tests (callback threaded, missing-callback error, other tools unaffected)
+- [x] `tests/cli/test_repl_clarify.py` - 6 tests (numeric / out-of-range / freetext / open-ended / KeyboardInterrupt / EOF)
+- [x] `tests/cli/test_tool_display.py` - 3 clarify cases added
+- [x] `tests/cli/test_repl.py` - `FakeAgent.run_conversation` accepts new `clarify_callback` kwarg
+- [x] Verified full suite: `python -m pytest tests -q` -> 235 passed (1 pre-existing shell-approval failure, unrelated)
+
+### Out of scope (deferred)
+
+- Arrow-key navigation UI
+- Timeout / auto-proceed
+- Gateway (Telegram / Discord) wiring
+
 ## Next
 
-- [ ] Clarify tool: a structured way for the agent to pause and ask one clarifying question instead of guessing when the request is ambiguous.
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.

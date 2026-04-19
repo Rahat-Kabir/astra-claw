@@ -136,6 +136,14 @@ Final Response
 - Same special-case pattern as `memory`: `agent/tool_runner.py` routes `fn_name == "todo"` to a handler with the store injected; standalone `registry.dispatch("todo", ...)` returns an unavailable-error JSON
 - `TodoStore.format_for_injection()` renders active (pending / in_progress) items; `_maybe_compact_history` in `agent/loop.py` appends that rendering as a synthetic user message after compaction so the plan survives context trimming
 
+### Clarify Tool
+
+- Thin shell: `astra_claw/tools/clarify_tool.py` validates the question + choices (max 4, blanks filtered) and delegates to a platform-provided `callback(question, choices) -> str`. The tool itself never touches UI code.
+- Same special-case pattern as `memory` / `todo`: `agent/tool_runner.py` routes `fn_name == "clarify"` and injects `clarify_callback` from `run_conversation`. Standalone `registry.dispatch("clarify", ...)` returns an "unavailable" error JSON so non-interactive callers get a clean failure instead of hanging.
+- CLI callback lives in `cli/repl.py::_build_clarify_callback`: stops the thinking spinner, renders the question via `cli_ui.print_clarify_question`, reads one line from the existing `PromptSession`. Numeric input in range resolves to the matching choice text; anything else (including the implicit "Other" option) is returned verbatim. `KeyboardInterrupt` / `EOFError` return an empty string so the agent can continue.
+- Toolset `clarify` (can be disabled via `tools.enabled_toolsets`).
+- Out of scope for v1: arrow-key navigation, timeout / auto-proceed, non-CLI gateway wiring. The CLI-only assumption lets us block on `input()` without threads or queues.
+
 ### Session Title Auto-generation
 
 - `astra_claw/agent/title_generator.py` generates a 3-5 word title from the first user/assistant exchange using a cheap, non-streaming LLM call (`llm.complete_once`)

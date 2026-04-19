@@ -23,6 +23,7 @@ from ..tools.registry import registry
 from ..tools.todo_tool import TodoStore
 
 # Import tool modules so they register themselves at agent import time.
+from ..tools import clarify_tool as clarify_tool_module  # noqa: F401
 from ..tools import file_tools  # noqa: F401
 from ..tools import memory_tool as memory_tool_module  # noqa: F401
 from ..tools import patch_tool  # noqa: F401
@@ -234,6 +235,7 @@ class AstraAgent:
         stream_writer: Optional[Callable[[str], None]] = None,
         *,
         events: Optional[AgentEvents] = None,
+        clarify_callback: Optional[Callable[[str, Optional[List[str]]], str]] = None,
     ) -> tuple:
         """Run a conversation with tool calling until completion.
 
@@ -303,6 +305,7 @@ class AstraAgent:
                 tool_calls_list,
                 memory_store=self.memory_store,
                 todo_store=self.todo_store,
+                clarify_callback=clarify_callback,
                 events=events,
             )
             history_messages.extend(tool_messages)

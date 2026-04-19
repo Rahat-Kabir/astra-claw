@@ -1,7 +1,7 @@
 """Light Rich rendering helpers for the interactive CLI."""
 
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
+from typing import Iterable, List, Mapping, Optional
 
 from rich.console import Console
 from rich.markup import escape
@@ -123,6 +123,26 @@ class CliUI:
                 self._status.stop()
             finally:
                 self._status = None
+
+    def print_clarify_question(
+        self,
+        question: str,
+        choices: Optional[List[str]] = None,
+    ) -> None:
+        """Render a clarify prompt: the question plus an optional numbered list."""
+        self.console.print(f"[bold cyan]?[/bold cyan] [bold]{escape(question)}[/bold]")
+        if choices:
+            for index, choice in enumerate(choices, start=1):
+                self.console.print(f"  [cyan]{index})[/cyan] {escape(choice)}")
+            other_index = len(choices) + 1
+            self.console.print(
+                f"  [cyan]{other_index})[/cyan] [dim]Other (type your answer)[/dim]"
+            )
+            self.console.print(
+                "[dim]Enter a number, or type your own answer.[/dim]"
+            )
+        else:
+            self.console.print("[dim]Type your answer.[/dim]")
 
     def print_tool_line(
         self,

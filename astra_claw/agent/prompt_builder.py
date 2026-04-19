@@ -24,7 +24,8 @@ TOOL_POLICY = """Tool usage guidelines:
 - Use write_file only for new files or deliberate full-file replacement
 - Use shell for everything else: listing directories, running scripts, git commands, installing packages
 - Use search_files for content grep and filename find across the tree
-- Prefer dedicated file tools over shell for file read/write operations"""
+- Prefer dedicated file tools over shell for file read/write operations
+- Use clarify when the request is genuinely ambiguous and a wrong guess would waste work; skip it for low-stakes defaults you can pick reasonably"""
 
 
 MEMORY_HINT = (

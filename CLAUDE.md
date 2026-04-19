@@ -70,7 +70,8 @@ astra-claw/
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
 |       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
-|       `-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
+|       |-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
+|       `-- clarify_tool.py   # clarify tool - thin shell, delegates to platform callback
 |-- tests/
 |   |-- agent/               # mocked agent loop tests (includes compaction coverage)
 |   |-- cli/                 # CLI command/completion/REPL tests
@@ -128,6 +129,7 @@ __main__.py        (imports loop + cli + session)
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.
+- The `clarify` tool is also special-cased in `agent/tool_runner.py`: `run_conversation` accepts `clarify_callback`, the runner injects it into the handler, and the CLI callback lives in `cli/repl.py::_build_clarify_callback`. Without a callback the handler returns an unavailable-error JSON so non-interactive callers don't hang.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.

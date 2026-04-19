@@ -59,6 +59,12 @@ class TestBuildToolPreview:
         assert build_tool_preview("read_file", {}) == ""
         assert build_tool_preview("shell", None) == ""
 
+    def test_clarify_preview_uses_question(self):
+        assert (
+            build_tool_preview("clarify", {"question": "Which env?"})
+            == "Which env?"
+        )
+
 
 class TestSummarizeToolResult:
     def test_error_payload_returns_error_prefix(self):
@@ -121,3 +127,19 @@ class TestSummarizeToolResult:
     def test_unknown_tool_with_json_returns_none(self):
         result = json.dumps({"random": "payload"})
         assert summarize_tool_result("weird_tool", result) is None
+
+    def test_clarify_returns_user_response(self):
+        result = json.dumps({
+            "question": "Q",
+            "choices_offered": ["a", "b"],
+            "user_response": "a",
+        })
+        assert summarize_tool_result("clarify", result) == "a"
+
+    def test_clarify_without_response_returns_none(self):
+        result = json.dumps({
+            "question": "Q",
+            "choices_offered": None,
+            "user_response": "",
+        })
+        assert summarize_tool_result("clarify", result) is None

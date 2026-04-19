@@ -3,7 +3,7 @@
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -173,12 +173,14 @@ def _run_loop(
             continue
 
         events = _build_agent_events(cli_ui)
+        clarify_callback = _build_clarify_callback(cli_ui, prompt)
         try:
             response, new_messages = agent.run_conversation(
                 message,
                 conversation_history=active_history,
                 stream_writer=cli_ui.stream_token,
                 events=events,
+                clarify_callback=clarify_callback,
             )
         finally:
             cli_ui.stop_thinking()
@@ -245,6 +247,33 @@ def _build_agent_events(cli_ui: CliUI) -> AgentEvents:
         on_tool_start=on_tool_start,
         on_tool_complete=on_tool_complete,
     )
+
+
+def _build_clarify_callback(
+    cli_ui: CliUI,
+    prompt_session: Any,
+) -> Callable[[str, Optional[List[str]]], str]:
+    """Return a callback that renders the clarify prompt and reads one answer.
+
+    Numeric input within range resolves to the matching choice text; anything
+    else (including the implicit "Other" option) is returned verbatim.
+    """
+
+    def _clarify(question: str, choices: Optional[List[str]]) -> str:
+        cli_ui.stop_thinking()
+        cli_ui.print_clarify_question(question, choices)
+        try:
+            answer = prompt_session.prompt([("class:prompt", "answer> ")]).strip()
+        except (KeyboardInterrupt, EOFError):
+            return ""
+
+        if choices and answer.isdigit():
+            index = int(answer)
+            if 1 <= index <= len(choices):
+                return choices[index - 1]
+        return answer
+
+    return _clarify
 
 
 def _maybe_schedule_auto_title(

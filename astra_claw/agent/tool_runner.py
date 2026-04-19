@@ -6,9 +6,10 @@ Extracted from agent.loop so the loop stays focused on LLM orchestration.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..memory import MemoryStore
+from ..tools.clarify_tool import clarify_tool
 from ..tools.memory_tool import memory_tool
 from ..tools.registry import registry
 from ..tools.todo_tool import TodoStore, todo_tool
@@ -20,6 +21,7 @@ def execute_tool_calls(
     *,
     memory_store: Optional[MemoryStore],
     todo_store: Optional[TodoStore] = None,
+    clarify_callback: Optional[Callable[[str, Optional[List[str]]], str]] = None,
     events: Optional[AgentEvents] = None,
 ) -> List[Dict[str, Any]]:
     """Dispatch each tool call and return the tool-role messages."""
@@ -50,6 +52,12 @@ def execute_tool_calls(
                 todos=fn_args.get("todos"),
                 merge=fn_args.get("merge", False),
                 store=todo_store,
+            )
+        elif fn_name == "clarify":
+            result = clarify_tool(
+                question=fn_args.get("question", ""),
+                choices=fn_args.get("choices"),
+                callback=clarify_callback,
             )
         else:
             result = registry.dispatch(fn_name, fn_args)

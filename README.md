@@ -10,6 +10,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
+- Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles (daemon-thread, silent-fail)
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
