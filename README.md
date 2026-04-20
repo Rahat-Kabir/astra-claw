@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/astra_claw_banner.png" alt="Astra-Claw" width="720">
+</p>
+
 # Astra-Claw
 
 An AI agent with tool calling capabilities. Talk to it in the terminal - it can read files, answer questions, and take actions using tools.
