@@ -49,6 +49,9 @@ def build_tool_preview(name: str, args: Dict[str, Any]) -> str:
         return _oneline(f"{verb} {count} item{'s' if count != 1 else ''}")
     if name == "clarify":
         return _oneline(args.get("question", ""))
+    if name == "session_search":
+        query = args.get("query")
+        return _oneline(query) if query else "recent sessions"
 
     for key in ("path", "query", "command", "name", "prompt"):
         if key in args:
@@ -131,6 +134,12 @@ def summarize_tool_result(name: str, result: str) -> Optional[str]:
         response = data.get("user_response")
         if isinstance(response, str) and response:
             return _oneline(response, _SUMMARY_MAX)
+        return None
+
+    if name == "session_search":
+        total = data.get("count")
+        if isinstance(total, int):
+            return f"{total} session{'s' if total != 1 else ''}"
         return None
 
     return None

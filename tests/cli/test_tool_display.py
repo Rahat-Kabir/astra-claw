@@ -65,6 +65,10 @@ class TestBuildToolPreview:
             == "Which env?"
         )
 
+    def test_session_search_preview_uses_query_or_recent_label(self):
+        assert build_tool_preview("session_search", {"query": "docker"}) == "docker"
+        assert build_tool_preview("session_search", {}) == "recent sessions"
+
 
 class TestSummarizeToolResult:
     def test_error_payload_returns_error_prefix(self):
@@ -143,3 +147,11 @@ class TestSummarizeToolResult:
             "user_response": "",
         })
         assert summarize_tool_result("clarify", result) is None
+
+    def test_session_search_reports_session_count(self):
+        result = json.dumps({"success": True, "mode": "search", "count": 2, "results": []})
+        assert summarize_tool_result("session_search", result) == "2 sessions"
+
+    def test_session_search_reports_singular_count(self):
+        result = json.dumps({"success": True, "mode": "recent", "count": 1, "results": []})
+        assert summarize_tool_result("session_search", result) == "1 session"

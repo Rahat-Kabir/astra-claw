@@ -46,7 +46,7 @@ astra-claw/
 |   |-- constants.py          # get_astraclaw_home() + get_workspace_fence() - single source of truth
 |   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
 |   |-- llm.py                # provider routing, client creation, and transient fallback policy
-|   |-- session.py            # JSONL session persistence (create, save, load, list)
+|   |-- session.py            # JSONL session persistence + recent/search helpers
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
 |   |-- cli/
@@ -69,6 +69,7 @@ astra-claw/
 |       |-- patch_tool.py     # patch - exact text replacement with diff output
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
+|       |-- session_search_tool.py # session_search - recent sessions + JSONL reranked recall
 |       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |       |-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
 |       `-- clarify_tool.py   # clarify tool - thin shell, delegates to platform callback
@@ -102,7 +103,7 @@ tools/registry.py  (no deps)
 tools/*.py         (import registry)
 agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps)
-agent/tool_runner.py (imports memory, tools.memory_tool, tools.registry, agent.events)
+agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_tool, tools.registry, agent.events)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
 cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)
@@ -130,6 +131,7 @@ __main__.py        (imports loop + cli + session)
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.
 - The `clarify` tool is also special-cased in `agent/tool_runner.py`: `run_conversation` accepts `clarify_callback`, the runner injects it into the handler, and the CLI callback lives in `cli/repl.py::_build_clarify_callback`. Without a callback the handler returns an unavailable-error JSON so non-interactive callers don't hang.
+- The `session_search` tool is special-cased in `agent/tool_runner.py`: `run_conversation` accepts `current_session_id`, the runner injects it into the handler, and search excludes the active session from both recent and query modes.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.

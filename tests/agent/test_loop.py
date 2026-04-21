@@ -195,6 +195,38 @@ class TestAstraAgentLoop:
             {"role": "assistant", "content": "Done reading file."},
         ]
 
+    def test_run_conversation_threads_current_session_id_into_tool_runner(self):
+        tool_call_stream = [
+            FakeChunk(
+                FakeDelta(
+                    tool_calls=[
+                        FakeToolCallDelta(
+                            index=0,
+                            call_id="call_session_search",
+                            function=FakeFunction(
+                                name="session_search",
+                                arguments='{"query": "clarify"}',
+                            ),
+                        )
+                    ]
+                )
+            )
+        ]
+        final_text_stream = [FakeChunk(FakeDelta(content="Done."))]
+        streams = [tool_call_stream, final_text_stream]
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=FakeClient(streams)):
+                with patch(
+                    "astra_claw.agent.loop.execute_tool_calls",
+                    return_value=[{"role": "tool", "tool_call_id": "call_session_search", "content": '{"success": true}'}],
+                ) as mock_execute:
+                    agent = AstraAgent()
+                    text, _ = agent.run_conversation("remember before", current_session_id="session-42")
+
+        assert text == "Done."
+        assert mock_execute.call_args.kwargs["current_session_id"] == "session-42"
+
     def test_run_conversation_uses_empty_args_when_tool_json_is_invalid(self):
         """Agent should fall back to {} when streamed tool arguments are invalid JSON."""
         tool_call_stream = [

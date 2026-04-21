@@ -28,6 +28,7 @@ from ..tools import file_tools  # noqa: F401
 from ..tools import memory_tool as memory_tool_module  # noqa: F401
 from ..tools import patch_tool  # noqa: F401
 from ..tools import search_tool  # noqa: F401
+from ..tools import session_search_tool as session_search_tool_module  # noqa: F401
 from ..tools import shell_tool  # noqa: F401
 from ..tools import todo_tool as todo_tool_module  # noqa: F401
 
@@ -236,6 +237,7 @@ class AstraAgent:
         *,
         events: Optional[AgentEvents] = None,
         clarify_callback: Optional[Callable[[str, Optional[List[str]]], str]] = None,
+        current_session_id: Optional[str] = None,
     ) -> tuple:
         """Run a conversation with tool calling until completion.
 
@@ -306,6 +308,7 @@ class AstraAgent:
                 memory_store=self.memory_store,
                 todo_store=self.todo_store,
                 clarify_callback=clarify_callback,
+                current_session_id=current_session_id,
                 events=events,
             )
             history_messages.extend(tool_messages)

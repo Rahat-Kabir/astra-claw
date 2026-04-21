@@ -12,6 +12,7 @@ from ..memory import MemoryStore
 from ..tools.clarify_tool import clarify_tool
 from ..tools.memory_tool import memory_tool
 from ..tools.registry import registry
+from ..tools.session_search_tool import session_search_tool
 from ..tools.todo_tool import TodoStore, todo_tool
 from .events import AgentEvents
 
@@ -22,6 +23,7 @@ def execute_tool_calls(
     memory_store: Optional[MemoryStore],
     todo_store: Optional[TodoStore] = None,
     clarify_callback: Optional[Callable[[str, Optional[List[str]]], str]] = None,
+    current_session_id: Optional[str] = None,
     events: Optional[AgentEvents] = None,
 ) -> List[Dict[str, Any]]:
     """Dispatch each tool call and return the tool-role messages."""
@@ -58,6 +60,13 @@ def execute_tool_calls(
                 question=fn_args.get("question", ""),
                 choices=fn_args.get("choices"),
                 callback=clarify_callback,
+            )
+        elif fn_name == "session_search":
+            result = session_search_tool(
+                query=fn_args.get("query"),
+                role_filter=fn_args.get("role_filter"),
+                limit=fn_args.get("limit", 3),
+                exclude_session_id=current_session_id,
             )
         else:
             result = registry.dispatch(fn_name, fn_args)

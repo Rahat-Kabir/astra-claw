@@ -30,6 +30,7 @@ Final Response
 - `ts` is stripped before messages are replayed to the model
 - JSONL was chosen over SQLite for zero dependencies and easy inspection
 - Manual or automatic compaction archives the old JSONL, then rewrites the session with the compacted transcript and updated compaction metadata
+- Session search stays on JSONL for now: `session.py` owns recent-session browsing and two-pass reranked recall so a future SQLite move can swap storage behind the same boundary
 
 ### Context Compaction
 
@@ -86,6 +87,26 @@ Final Response
 - Cross-platform behavior is selected from the current OS
 - Results are capped at 50 lines/files
 
+### Session Search Tool
+
+- `astra_claw/tools/session_search_tool.py` is a thin wrapper over `session.py`
+- Two modes:
+  - empty query -> recent sessions (`list_recent_sessions`)
+  - non-empty query -> cross-session search (`search_sessions`)
+- Search is JSONL-native and two-pass:
+  - pass 1 reads only session meta/title + recency to build a shortlist
+  - pass 2 loads only shortlisted transcripts and reranks with message content
+- Scoring uses fixed heuristics:
+  - exact phrase in title: `+100`
+  - exact phrase in body: `+40`
+  - per-term in title: `+20`
+  - per-term in user/assistant: `+10`
+  - per-term in tool output: `+3`
+  - recency bonus: `max(0, 14 - days_old)`
+- Results are grouped by session, not by message, and include `session_id`, `title`, `created`, `message_count`, `score`, `preview`, and up to 3 snippets
+- Current session is excluded by threading `current_session_id` through `run_conversation(...)->execute_tool_calls(...)`
+- `role_filter` is optional and limits search to `user`, `assistant`, and/or `tool`
+
 ### Shell Tool Safety
 
 - Regex patterns detect dangerous commands such as recursive delete, `mkfs`, `dd`, SQL `DROP`, and `curl|sh`
@@ -108,7 +129,7 @@ Final Response
 - `run_conversation(..., events=None)` keeps the surface opt-in; any missing hook is a no-op and the agent behaves identically when called without events
 - `agent/streaming.py` fires `on_thinking(True)` before each streamed LLM call and `on_thinking(False)` on the first content or tool-call delta; compaction summary streams are called with `on_thinking=None` so the user's spinner only tracks user-facing turns
 - `agent/tool_runner.py` brackets every dispatch with `on_tool_start` / `on_tool_complete` and preserves the `memory` tool special-case that injects the agent's `MemoryStore`
-- `cli/tool_display.py` holds pure preview + summary helpers (no Rich deps): `build_tool_preview` picks the primary arg per tool (path, pattern, command, action+target) and `summarize_tool_result` parses the JSON result into a short human label (line counts, `+N -M` for patch, exit codes for shell, etc.)
+- `cli/tool_display.py` holds pure preview + summary helpers (no Rich deps): `build_tool_preview` picks the primary arg per tool (path, pattern, command, action+target) and `summarize_tool_result` parses the JSON result into a short human label (line counts, `+N -M` for patch, exit codes for shell, session counts for `session_search`, etc.)
 - `cli/ui.py` owns the Rich dots spinner via `start_thinking(label)` / `stop_thinking()` and renders one compact dim line per completed tool via `print_tool_line(name, preview, summary)`; errors show in red, no emoji
 - `cli/repl.py` builds an `AgentEvents` per turn, updates the spinner label to `Running <tool> <preview>` during dispatch, and wraps `run_conversation` in `try/finally` so the spinner always stops
 
@@ -143,6 +164,13 @@ Final Response
 - CLI callback lives in `cli/repl.py::_build_clarify_callback`: stops the thinking spinner, renders the question via `cli_ui.print_clarify_question`, reads one line from the existing `PromptSession`. Numeric input in range resolves to the matching choice text; anything else (including the implicit "Other" option) is returned verbatim. `KeyboardInterrupt` / `EOFError` return an empty string so the agent can continue.
 - Toolset `clarify` (can be disabled via `tools.enabled_toolsets`).
 - Out of scope for v1: arrow-key navigation, timeout / auto-proceed, non-CLI gateway wiring. The CLI-only assumption lets us block on `input()` without threads or queues.
+
+### Special-Case Tool Injection
+
+- `memory`: injects the agent `MemoryStore`
+- `todo`: injects the per-session `TodoStore`
+- `clarify`: injects the CLI callback
+- `session_search`: injects `current_session_id` so the active session never appears in recall results
 
 ### Session Title Auto-generation
 
@@ -206,10 +234,10 @@ session.py         (imports constants)
 memory.py          (imports constants)
 soul.py            (imports constants)
 tools/registry.py  (no deps)
-tools/*.py         (import registry; memory_tool also imports memory; todo_tool is self-contained)
+tools/*.py         (import registry; memory_tool also imports memory; todo_tool/session_search_tool are thin wrappers)
 agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps; iterates SDK stream + on_thinking)
-agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.registry, events)
+agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.session_search_tool, tools.registry, events)
 agent/title_generator.py (imports llm, session)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
@@ -240,7 +268,7 @@ __main__.py        (imports loop + cli + session)
 ## Testing Strategy
 
 - `tests/test_features.py` covers core regressions for constants, config, registry behavior, and prompt assembly
-- `tests/test_session.py` covers JSONL session persistence and recovery behavior
+- `tests/test_session.py` covers JSONL session persistence, recent-session listing, and JSONL session-search ranking/exclusion behavior
 - `tests/test_memory.py` covers `MemoryStore` add/replace/remove, char limits, threat scanning, and frozen-snapshot stability
 - `tests/test_soul.py` covers first-run seeding, no-overwrite behavior, loading, fallback, threat blocking, and truncation
 - `tests/test_workspace.py` covers the `--workspace` flag and the write fence (inside-ok, relative escape blocked, absolute escape blocked, no-fence fallback, flag parsing, bad path exit)
@@ -248,10 +276,10 @@ __main__.py        (imports loop + cli + session)
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
 - `tests/cli/` covers slash commands, completion, REPL routing, session switching, and stream callback use
-- `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, and the memory tool wrapper
+- `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, session-search behavior, and the memory tool wrapper
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - `tests/agent/test_events.py` covers `AgentEvents` wiring: thinking toggles, tool start/complete ordering, `events=None` back-compat, and compaction silence
-- `tests/cli/test_tool_display.py` covers preview + summary helpers for all 6 tools plus error paths
+- `tests/cli/test_tool_display.py` covers preview + summary helpers for all 7 tools plus error paths
 - `tests/agent/test_title_generator.py` covers title cleanup (quotes, prefix, truncation), silent-fail on exception, skip when already titled, daemon-thread wiring, and the `user_msg_count <= 2` gate
 - The full suite is run with `python -m pytest tests -v`
 - Focused commands and suite layout live in `docs/testing.md`

@@ -37,6 +37,7 @@ class FakeAgent:
         *,
         events=None,
         clarify_callback=None,
+        current_session_id=None,
     ):
         history = list(conversation_history or [])
         self.calls.append({
@@ -45,6 +46,7 @@ class FakeAgent:
             "stream_writer": stream_writer,
             "events": events,
             "clarify_callback": clarify_callback,
+            "current_session_id": current_session_id,
         })
         if stream_writer is not None:
             stream_writer("assistant response")
@@ -105,6 +107,7 @@ def test_normal_prompt_calls_agent_with_stream_writer_and_saves_messages():
     assert len(agent.calls) == 1
     assert agent.calls[0]["message"] == "hello"
     assert callable(agent.calls[0]["stream_writer"])
+    assert agent.calls[0]["current_session_id"] == "session-1"
     assert saved == [
         ("session-1", {"role": "user", "content": "hello"}),
         ("session-1", {"role": "assistant", "content": "assistant response"}),

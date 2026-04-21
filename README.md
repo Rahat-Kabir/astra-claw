@@ -13,6 +13,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
+- Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles (daemon-thread, silent-fail)
@@ -135,8 +136,10 @@ astra-claw/
 |       |-- patch_tool.py     # exact text replacement tool with diff output
 |       |-- shell_tool.py     # shell command execution
 |       |-- search_tool.py    # file search (content + filename)
+|       |-- session_search_tool.py # cross-session recall over JSONL session history
 |       |-- memory_tool.py    # memory tool (add/replace/remove)
-|       `-- todo_tool.py      # session todo list (plan + track tasks)
+|       |-- todo_tool.py      # session todo list (plan + track tasks)
+|       `-- clarify_tool.py   # ask one clarifying question via the CLI callback
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
 |   |-- cli/                 # slash command and REPL tests
@@ -204,6 +207,8 @@ If `tools.enabled_toolsets` is omitted, all registered and available tools are e
 Fallback retries only apply to transient/runtime failures such as timeouts, connection errors, rate limits, and 5xx responses. Auth and bad-request errors do not fail over.
 
 Context compaction rewrites long interactive session transcripts after archiving the old JSONL, so resumed sessions replay the compacted history instead of the full original middle.
+
+`session_search` adds JSONL-based cross-session recall: empty query lists recent sessions; non-empty query runs a two-pass reranked search over session titles and message content, with current-session exclusion.
 
 ## Testing
 

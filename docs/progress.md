@@ -213,6 +213,25 @@ Why: give the agent a structured way to pause and ask one question instead of gu
 - Timeout / auto-proceed
 - Gateway (Telegram / Discord) wiring
 
+## v0.2.5 - Session Search (2026-04-21)
+
+Why: give the agent cross-session recall without changing the JSONL storage model yet.
+
+### Completed
+
+- [x] `astra_claw/session.py` - added `list_recent_sessions()` and `search_sessions()` with two-pass JSONL rerank, title/body/tool scoring, snippets, previews, and current-session exclusion
+- [x] `astra_claw/tools/session_search_tool.py` - `SESSION_SEARCH_SCHEMA` + thin JSON wrapper, toolset `session_search`
+- [x] `astra_claw/agent/tool_runner.py` - `session_search` branch injects `current_session_id` for exclusion
+- [x] `astra_claw/agent/loop.py` - `run_conversation()` gains `current_session_id`; imports session search module for registry side-effect
+- [x] `astra_claw/cli/repl.py` - passes the active session id into the agent call
+- [x] `astra_claw/agent/prompt_builder.py` - tool policy now points the model to `session_search` for cross-session recall
+- [x] `astra_claw/cli/tool_display.py` - session-search preview (`query` or `recent sessions`) and summary (`N sessions`)
+- [x] `tests/test_session.py` - added recent/search ranking, exclusion, snippet, role-filter, and bad-JSON coverage
+- [x] `tests/tools/test_session_search_tool.py` - schema + wrapper coverage
+- [x] `tests/agent/test_tool_runner_clarify.py` / `tests/agent/test_loop.py` / `tests/cli/test_repl.py` / `tests/cli/test_tool_display.py` - added plumbing coverage for current-session threading and CLI feedback
+- [x] Verified focused suite: `D:\PROJECT\astra-claw\venv\Scripts\python.exe -m pytest tests/test_session.py tests/tools/test_session_search_tool.py tests/agent/test_tool_runner_clarify.py tests/agent/test_loop.py tests/cli/test_repl.py tests/cli/test_tool_display.py -q` -> 88 passed
+- [x] Verified full suite: `D:\PROJECT\astra-claw\venv\Scripts\python.exe -m pytest tests -q` -> 256 passed
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.

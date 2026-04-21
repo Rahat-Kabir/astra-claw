@@ -181,6 +181,7 @@ def _run_loop(
                 stream_writer=cli_ui.stream_token,
                 events=events,
                 clarify_callback=clarify_callback,
+                current_session_id=active_session_id,
             )
         finally:
             cli_ui.stop_thinking()

@@ -28,6 +28,7 @@ python -m pytest tests/tools/test_search_tool.py -v
 python -m pytest tests/agent/test_loop.py -v
 python -m pytest tests/agent/test_events.py -v
 python -m pytest tests/cli/test_tool_display.py -v
+python -m pytest tests/test_session.py tests/tools/test_session_search_tool.py -v
 ```
 
 ## Test Layout
@@ -38,8 +39,8 @@ python -m pytest tests/cli/test_tool_display.py -v
 - `tests/agent/test_events.py`: `AgentEvents` hooks (thinking toggle, tool start/complete ordering, back-compat, compaction silence)
 - `tests/agent/test_context_compactor.py`: compaction budget, protected window, and summary reuse tests
 - `tests/cli/`: slash command, completion, REPL routing, and tool-display preview/summary tests
-- `tests/test_session.py`: JSONL session persistence tests
-- `tests/tools/`: tool-level tests for file, patch, shell, search, and memory behavior
+- `tests/test_session.py`: JSONL session persistence and JSONL session-search tests
+- `tests/tools/`: tool-level tests for file, patch, shell, search, memory, and session-search behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls
 
 ## Notes

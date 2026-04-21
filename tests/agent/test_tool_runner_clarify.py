@@ -1,6 +1,7 @@
 """Tests for clarify_callback threading through execute_tool_calls."""
 
 import json
+from unittest.mock import patch
 
 from astra_claw.agent.tool_runner import execute_tool_calls
 
@@ -52,3 +53,26 @@ def test_clarify_other_tools_unaffected_by_callback_param():
     payload = json.loads(messages[0]["content"])
     assert "error" in payload
     assert "Unknown tool" in payload["error"]
+
+
+def test_session_search_receives_current_session_id():
+    tool_calls = [_call("session_search", {"query": "clarify"})]
+
+    with patch(
+        "astra_claw.agent.tool_runner.session_search_tool",
+        return_value='{"success": true, "count": 0, "results": []}',
+    ) as mock_session_search:
+        messages = execute_tool_calls(
+            tool_calls,
+            memory_store=None,
+            current_session_id="session-123",
+        )
+
+    mock_session_search.assert_called_once_with(
+        query="clarify",
+        role_filter=None,
+        limit=3,
+        exclude_session_id="session-123",
+    )
+    payload = json.loads(messages[0]["content"])
+    assert payload["success"] is True
