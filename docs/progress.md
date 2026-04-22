@@ -235,3 +235,59 @@ Why: give the agent cross-session recall without changing the JSONL storage mode
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
+
+## Planned
+
+### v0.2.6 - Web Search (Tavily)
+
+Why: give the agent live web access for facts, docs, and anything outside the repo / past sessions.
+
+- [ ] `astra_claw/tools/web_search_tool.py` - Tavily-backed `web_search(query, max_results)`, toolset `web`, `check_fn` gates on `TAVILY_API_KEY`
+- [ ] Normalized return shape `{success, data: {web: [{title, url, description, score}]}}` so provider swap is one-function change later
+- [ ] `astra_claw/agent/prompt_builder.py` - tool policy line for when to use web_search
+- [ ] `astra_claw/cli/tool_display.py` - web_search preview/summary
+- [ ] Tests mirror `tests/tools/test_session_search_tool.py` pattern
+
+### v0.2.7 - Web Extract (Tavily)
+
+Why: separate metadata-only search from full-page content so the agent only pays for what it reads. Same split as hermes's `web_search` / `web_extract`.
+
+- [ ] `astra_claw/tools/web_extract_tool.py` - Tavily `/extract`, max 3 URLs, max ~5000 chars per page
+- [ ] Same `check_fn` / `TAVILY_API_KEY` gate, shared `_tavily_request` helper between the two tools
+- [ ] Tests + tool_display entries
+
+### v0.2.8 - Skills System (MVP)
+
+Why: turn every new capability into a markdown file instead of Python code. Single biggest extensibility unlock.
+
+- [ ] `~/.astraclaw/skills/<name>/SKILL.md` convention (markdown with optional frontmatter)
+- [ ] `astra_claw/skills.py` loader: scans directory, validates safely (same prompt-injection scan as SOUL.md)
+- [ ] `/skill <name>` slash command in `cli/commands.py` - activates one skill for the rest of the session
+- [ ] `astra_claw/agent/prompt_builder.py` - slots active skill between SOUL and TOOL_POLICY
+- [ ] Tests + README skill-authoring section
+
+### v0.2.9 - Context References
+
+Why: cheap UX win for conversational file/session context. `@path/to/file.py` and `@session:<id>` expand inline.
+
+- [ ] `astra_claw/cli/context_refs.py` - tokenize user input, expand `@file` / `@session:` refs before sending to agent
+- [ ] Size caps per reference (to avoid blowing the prompt)
+- [ ] Tests for expansion, escaping, size capping
+
+### v0.3.0 - Delegation / Sub-agents (chapter theme)
+
+Why: once skills exist, sub-agents get real - a parent agent can spawn a child with a different skill. Composition story.
+
+- [ ] `delegate` tool - spawn a child AstraAgent with a named skill, return its final answer
+- [ ] Session parent/child linkage in session metadata (storage-agnostic, still JSONL)
+- [ ] Context budget allocation between parent and children
+- [ ] Tests + smoke script
+
+## Deferred (not scheduled)
+
+- SQLite migration - only when a concrete feature demands it (first firm candidate: gateway, which is not committed)
+- Gateway (Telegram / Discord) - defer until committed; pulls cron, SQLite, concurrent writes behind it
+- Cron scheduling - depends on gateway or persistent runner
+- MCP client - overlaps with skills; pick one extensibility story first
+- Prompt caching - only matters at scale
+- Analytics / usage dashboard - wait until there's enough data to look at
