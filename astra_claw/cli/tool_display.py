@@ -52,6 +52,14 @@ def build_tool_preview(name: str, args: Dict[str, Any]) -> str:
     if name == "session_search":
         query = args.get("query")
         return _oneline(query) if query else "recent sessions"
+    if name == "web_extract":
+        urls = args.get("urls")
+        if isinstance(urls, list) and urls:
+            first = str(urls[0])
+            extra = len(urls) - 1
+            if extra > 0:
+                return _oneline(f"{first} (+{extra})")
+            return _oneline(first)
 
     for key in ("path", "query", "command", "name", "prompt"):
         if key in args:
@@ -140,6 +148,16 @@ def summarize_tool_result(name: str, result: str) -> Optional[str]:
         total = data.get("count")
         if isinstance(total, int):
             return f"{total} session{'s' if total != 1 else ''}"
+        return None
+
+    if name in ("web_search", "web_extract"):
+        results = data.get("results")
+        if isinstance(results, list):
+            total = len(results)
+            noun = "result" if name == "web_search" else "page"
+            if total == 1:
+                return f"1 {noun}"
+            return f"{total} {noun}s"
         return None
 
     return None

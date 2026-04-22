@@ -25,10 +25,12 @@ python -m pytest tests/tools/test_file_tools.py -v
 python -m pytest tests/tools/test_patch_tool.py -v
 python -m pytest tests/tools/test_shell_tool.py -v
 python -m pytest tests/tools/test_search_tool.py -v
+python -m pytest tests/tools/test_web_tools.py -v
 python -m pytest tests/agent/test_loop.py -v
 python -m pytest tests/agent/test_events.py -v
 python -m pytest tests/cli/test_tool_display.py -v
 python -m pytest tests/test_session.py tests/tools/test_session_search_tool.py -v
+python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py tests/agent/test_loop.py tests/test_features.py -v
 ```
 
 ## Test Layout
@@ -40,7 +42,7 @@ python -m pytest tests/test_session.py tests/tools/test_session_search_tool.py -
 - `tests/agent/test_context_compactor.py`: compaction budget, protected window, and summary reuse tests
 - `tests/cli/`: slash command, completion, REPL routing, and tool-display preview/summary tests
 - `tests/test_session.py`: JSONL session persistence and JSONL session-search tests
-- `tests/tools/`: tool-level tests for file, patch, shell, search, memory, and session-search behavior
+- `tests/tools/`: tool-level tests for file, patch, shell, search, web, memory, and session-search behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls
 
 ## Notes

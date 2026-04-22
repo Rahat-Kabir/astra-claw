@@ -232,31 +232,28 @@ Why: give the agent cross-session recall without changing the JSONL storage mode
 - [x] Verified focused suite: `D:\PROJECT\astra-claw\venv\Scripts\python.exe -m pytest tests/test_session.py tests/tools/test_session_search_tool.py tests/agent/test_tool_runner_clarify.py tests/agent/test_loop.py tests/cli/test_repl.py tests/cli/test_tool_display.py -q` -> 88 passed
 - [x] Verified full suite: `D:\PROJECT\astra-claw\venv\Scripts\python.exe -m pytest tests -q` -> 256 passed
 
+## v0.2.6 - Tavily Web Tools (2026-04-22)
+
+Why: give the agent live web lookup and page extraction without adding a larger multi-backend stack.
+
+### Completed
+
+- [x] `astra_claw/tools/web_tools.py` - added Tavily-backed `web_search` and `web_extract`, toolset `web`, `check_fn` gating on `TAVILY_API_KEY`
+- [x] `astra_claw/agent/loop.py` - imports web tools for registry side-effect
+- [x] `astra_claw/agent/prompt_builder.py` - tool policy now points the model to `web_search` and `web_extract`
+- [x] `astra_claw/cli/tool_display.py` - added web preview/summary lines
+- [x] `astra_claw/constants.py` - fixed `get_astraclaw_home()` to avoid eager `Path.home()` evaluation when `ASTRACLAW_HOME` is set
+- [x] `tests/tools/test_web_tools.py` - added focused web tool coverage
+- [x] `tests/test_features.py` - added regression coverage for the lazy home-path fix
+- [x] User-verified focused pytest runs passed after the constants fix
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
 
 ## Planned
 
-### v0.2.6 - Web Search (Tavily)
-
-Why: give the agent live web access for facts, docs, and anything outside the repo / past sessions.
-
-- [ ] `astra_claw/tools/web_search_tool.py` - Tavily-backed `web_search(query, max_results)`, toolset `web`, `check_fn` gates on `TAVILY_API_KEY`
-- [ ] Normalized return shape `{success, data: {web: [{title, url, description, score}]}}` so provider swap is one-function change later
-- [ ] `astra_claw/agent/prompt_builder.py` - tool policy line for when to use web_search
-- [ ] `astra_claw/cli/tool_display.py` - web_search preview/summary
-- [ ] Tests mirror `tests/tools/test_session_search_tool.py` pattern
-
-### v0.2.7 - Web Extract (Tavily)
-
-Why: separate metadata-only search from full-page content so the agent only pays for what it reads. Same split as hermes's `web_search` / `web_extract`.
-
-- [ ] `astra_claw/tools/web_extract_tool.py` - Tavily `/extract`, max 3 URLs, max ~5000 chars per page
-- [ ] Same `check_fn` / `TAVILY_API_KEY` gate, shared `_tavily_request` helper between the two tools
-- [ ] Tests + tool_display entries
-
-### v0.2.8 - Skills System (MVP)
+### v0.2.7 - Skills System (MVP)
 
 Why: turn every new capability into a markdown file instead of Python code. Single biggest extensibility unlock.
 
@@ -266,7 +263,7 @@ Why: turn every new capability into a markdown file instead of Python code. Sing
 - [ ] `astra_claw/agent/prompt_builder.py` - slots active skill between SOUL and TOOL_POLICY
 - [ ] Tests + README skill-authoring section
 
-### v0.2.9 - Context References
+### v0.2.8 - Context References
 
 Why: cheap UX win for conversational file/session context. `@path/to/file.py` and `@session:<id>` expand inline.
 

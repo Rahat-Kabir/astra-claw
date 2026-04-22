@@ -1,4 +1,5 @@
 import types
+import tempfile
 from unittest.mock import patch
 
 from astra_claw.agent.loop import AstraAgent
@@ -84,6 +85,41 @@ class FailingClient:
 
 
 class TestAstraAgentLoop:
+    def test_agent_exposes_web_tools_when_tavily_key_is_present(self):
+        with tempfile.TemporaryDirectory() as tmp_home:
+            with patch.dict(
+                "os.environ",
+                {
+                    "OPENAI_API_KEY": "test-key",
+                    "TAVILY_API_KEY": "tvly-test",
+                    "ASTRACLAW_HOME": tmp_home,
+                },
+                clear=True,
+            ):
+                with patch("astra_claw.agent.loop.create_client", return_value=FakeClient([[]])):
+                    agent = AstraAgent()
+
+        names = {tool["function"]["name"] for tool in agent.tools}
+        assert "web_search" in names
+        assert "web_extract" in names
+
+    def test_agent_hides_web_tools_when_tavily_key_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp_home:
+            with patch.dict(
+                "os.environ",
+                {
+                    "OPENAI_API_KEY": "test-key",
+                    "ASTRACLAW_HOME": tmp_home,
+                },
+                clear=True,
+            ):
+                with patch("astra_claw.agent.loop.create_client", return_value=FakeClient([[]])):
+                    agent = AstraAgent()
+
+        names = {tool["function"]["name"] for tool in agent.tools}
+        assert "web_search" not in names
+        assert "web_extract" not in names
+
     def test_run_conversation_returns_plain_text_without_tool_calls(self):
         """Agent should return streamed text directly when no tool call is emitted."""
         streams = [

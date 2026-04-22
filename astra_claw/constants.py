@@ -15,7 +15,10 @@ def get_astraclaw_home() -> Path:
     Reads ASTRACLAW_HOME env var, falls back to ~/.astraclaw.
     This is the single source of truth — all other modules should import this.
     """
-    return Path(os.getenv("ASTRACLAW_HOME", Path.home() / ".astraclaw"))
+    configured = os.getenv("ASTRACLAW_HOME")
+    if configured:
+        return Path(configured)
+    return Path.home() / ".astraclaw"
 
 
 # ---------------------------------------------------------------------------

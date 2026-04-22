@@ -46,6 +46,7 @@ Final Response
 
 - `constants.py` exposes `get_astraclaw_home()`
 - `ASTRACLAW_HOME` can override the default path
+- `get_astraclaw_home()` must branch lazily so `ASTRACLAW_HOME` overrides do not evaluate `Path.home()` first
 - Other modules should import this helper instead of hardcoding paths
 
 ### Tool Registry Pattern
@@ -68,6 +69,7 @@ Final Response
 - Built-in tools are grouped by toolset:
   - `filesystem`: `read_file`, `write_file`, `patch`, `search_files`
   - `terminal`: `shell`
+  - `web`: `web_search`, `web_extract`
   - `memory`: `memory`
 - `agent/loop.py` reads optional `tools.enabled_toolsets` from config and passes that filter into the registry
 - If no toolset filter is configured, all registered and available tools are exposed
@@ -86,6 +88,15 @@ Final Response
   - `target="files"` uses find/dir-like filename search
 - Cross-platform behavior is selected from the current OS
 - Results are capped at 50 lines/files
+
+### Web Tools
+
+- `astra_claw/tools/web_tools.py` provides Tavily-backed `web_search` and `web_extract`
+- Both tools are synchronous and return JSON strings through the normal registry path
+- `check_fn` hides both schemas unless `TAVILY_API_KEY` is set
+- `web_search` returns compact metadata only: `title`, `url`, `description`, `position`
+- `web_extract` accepts up to 5 URLs, validates `http/https`, supports `format` (`markdown` or `text`) and `extract_depth` (`basic` or `advanced`)
+- Extracted content is capped at 8000 chars per URL and marks `truncated: true` when clipped
 
 ### Session Search Tool
 
@@ -235,6 +246,7 @@ memory.py          (imports constants)
 soul.py            (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry; memory_tool also imports memory; todo_tool/session_search_tool are thin wrappers)
+tools/web_tools.py (imports registry only + stdlib HTTP helpers)
 agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps; iterates SDK stream + on_thinking)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.session_search_tool, tools.registry, events)
@@ -277,6 +289,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
 - `tests/cli/` covers slash commands, completion, REPL routing, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, session-search behavior, and the memory tool wrapper
+- `tests/tools/test_web_tools.py` covers Tavily schema gating, normalization, truncation, and validation errors
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - `tests/agent/test_events.py` covers `AgentEvents` wiring: thinking toggles, tool start/complete ordering, `events=None` back-compat, and compaction silence
 - `tests/cli/test_tool_display.py` covers preview + summary helpers for all 7 tools plus error paths

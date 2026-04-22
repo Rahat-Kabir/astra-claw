@@ -69,6 +69,15 @@ class TestBuildToolPreview:
         assert build_tool_preview("session_search", {"query": "docker"}) == "docker"
         assert build_tool_preview("session_search", {}) == "recent sessions"
 
+    def test_web_extract_preview_uses_first_url_and_extra_count(self):
+        assert (
+            build_tool_preview(
+                "web_extract",
+                {"urls": ["https://example.com/a", "https://example.com/b"]},
+            )
+            == "https://example.com/a (+1)"
+        )
+
 
 class TestSummarizeToolResult:
     def test_error_payload_returns_error_prefix(self):
@@ -155,3 +164,11 @@ class TestSummarizeToolResult:
     def test_session_search_reports_singular_count(self):
         result = json.dumps({"success": True, "mode": "recent", "count": 1, "results": []})
         assert summarize_tool_result("session_search", result) == "1 session"
+
+    def test_web_search_reports_result_count(self):
+        result = json.dumps({"success": True, "results": [{"url": "a"}, {"url": "b"}]})
+        assert summarize_tool_result("web_search", result) == "2 results"
+
+    def test_web_extract_reports_page_count(self):
+        result = json.dumps({"success": True, "results": [{"url": "a"}]})
+        assert summarize_tool_result("web_extract", result) == "1 page"

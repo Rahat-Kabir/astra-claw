@@ -31,6 +31,7 @@ from ..tools import search_tool  # noqa: F401
 from ..tools import session_search_tool as session_search_tool_module  # noqa: F401
 from ..tools import shell_tool  # noqa: F401
 from ..tools import todo_tool as todo_tool_module  # noqa: F401
+from ..tools import web_tools  # noqa: F401
 
 
 class AstraAgent:

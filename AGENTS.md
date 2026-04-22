@@ -69,6 +69,7 @@ astra-claw/
 |       |-- patch_tool.py     # patch - exact text replacement with diff output
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
+|       |-- web_tools.py      # Tavily-backed web_search + web_extract
 |       |-- session_search_tool.py # session_search - recent sessions + JSONL reranked recall
 |       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |       |-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
@@ -133,6 +134,7 @@ __main__.py        (imports loop + cli + session)
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.
 - The `clarify` tool is also special-cased in `agent/tool_runner.py`: `run_conversation` accepts `clarify_callback`, the runner injects it into the handler, and the CLI callback lives in `cli/repl.py::_build_clarify_callback`. Without a callback the handler returns an unavailable-error JSON so non-interactive callers don't hang.
 - The `session_search` tool is special-cased in `agent/tool_runner.py`: `run_conversation` accepts `current_session_id`, the runner injects it into the handler, and search excludes the active session from both recent and query modes.
+- `web_search` and `web_extract` live in `tools/web_tools.py`, use Tavily in v1, and are hidden unless `TAVILY_API_KEY` is set.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.

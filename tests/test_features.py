@@ -36,6 +36,12 @@ class TestConstants:
         with patch.dict(os.environ, {"ASTRACLAW_HOME": custom}):
             assert get_astraclaw_home() == Path(custom)
 
+    def test_custom_home_does_not_evaluate_path_home(self, tmp_path):
+        custom = str(tmp_path / "custom_home")
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": custom}, clear=True):
+            with patch("pathlib.Path.home", side_effect=RuntimeError("should not be called")):
+                assert get_astraclaw_home() == Path(custom)
+
 
 class TestConfig:
     def test_ensure_home_creates_dirs(self, tmp_path):

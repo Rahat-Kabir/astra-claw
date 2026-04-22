@@ -13,6 +13,7 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
+- Searches the web via `web_search` and extracts pages via `web_extract` (Tavily-backed, hidden unless `TAVILY_API_KEY` is set)
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
@@ -46,6 +47,16 @@ $env:OPENAI_API_KEY = "sk-..."
 
 # Bash
 export OPENAI_API_KEY="sk-..."
+```
+
+Optional web tools:
+
+```bash
+# PowerShell
+$env:TAVILY_API_KEY = "tvly-..."
+
+# Bash
+export TAVILY_API_KEY="tvly-..."
 ```
 
 Run:
@@ -136,6 +147,7 @@ astra-claw/
 |       |-- patch_tool.py     # exact text replacement tool with diff output
 |       |-- shell_tool.py     # shell command execution
 |       |-- search_tool.py    # file search (content + filename)
+|       |-- web_tools.py      # Tavily-backed web_search + web_extract
 |       |-- session_search_tool.py # cross-session recall over JSONL session history
 |       |-- memory_tool.py    # memory tool (add/replace/remove)
 |       |-- todo_tool.py      # session todo list (plan + track tasks)
@@ -192,6 +204,7 @@ tools:
   enabled_toolsets:
     - filesystem
     - terminal
+    - web
     - memory
 memory:
   enabled: true
@@ -203,6 +216,8 @@ session:
 ```
 
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.
+
+`web_search` and `web_extract` are exposed only when `TAVILY_API_KEY` is set.
 
 Fallback retries only apply to transient/runtime failures such as timeouts, connection errors, rate limits, and 5xx responses. Auth and bad-request errors do not fail over.
 

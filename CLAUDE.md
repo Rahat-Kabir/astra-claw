@@ -1,7 +1,7 @@
 # Astra-Claw - Development Guide
 
 Instructions for AI coding assistants and developers working on the astra-claw codebase.
-Treat this file like `AGENTS.md`: it is the project guide for assistant behavior and development rules.
+Treat this file like `CLAUDE.md`: it is the project guide for assistant behavior and development rules.
 
 ## Core Principles
 
@@ -69,6 +69,7 @@ astra-claw/
 |       |-- patch_tool.py     # patch - exact text replacement with diff output
 |       |-- shell_tool.py     # shell command execution (with dangerous command approval)
 |       |-- search_tool.py    # search_files - content grep + filename find (cross-platform)
+|       |-- web_tools.py      # Tavily-backed web_search + web_extract
 |       |-- session_search_tool.py # session_search - recent sessions + JSONL reranked recall
 |       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |       |-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
@@ -119,6 +120,7 @@ __main__.py        (imports loop + cli + session)
 - Tools may optionally provide a `check_fn` so unavailable tools are hidden from model schemas.
 - Tests must NEVER write to `~/.astraclaw/` - set `ASTRACLAW_HOME` env var to `tmp_path`.
 - Sessions are JSONL files in `~/.astraclaw/sessions/` - first line is meta, rest are messages.
+- `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
 - `run_conversation()` returns `(text, new_messages)` - session saving happens in `__main__.py`, not in the agent.
 - `run_conversation()` accepts optional `stream_writer`; CLI/TUI output should use that instead of adding UI code inside the agent loop.
 - `run_conversation()` also accepts optional `events: AgentEvents` with `on_thinking` / `on_tool_start` / `on_tool_complete` hooks; all hooks are optional and missing hooks are no-ops, so non-CLI callers can skip it entirely.
@@ -132,9 +134,9 @@ __main__.py        (imports loop + cli + session)
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.
 - The `clarify` tool is also special-cased in `agent/tool_runner.py`: `run_conversation` accepts `clarify_callback`, the runner injects it into the handler, and the CLI callback lives in `cli/repl.py::_build_clarify_callback`. Without a callback the handler returns an unavailable-error JSON so non-interactive callers don't hang.
 - The `session_search` tool is special-cased in `agent/tool_runner.py`: `run_conversation` accepts `current_session_id`, the runner injects it into the handler, and search excludes the active session from both recent and query modes.
+- `web_search` and `web_extract` live in `tools/web_tools.py`, use Tavily in v1, and are hidden unless `TAVILY_API_KEY` is set.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.
 - Memory uses a frozen-snapshot pattern: `load_from_disk()` runs once at agent init, and the system prompt never changes mid-session even after writes. Snapshot refreshes on next session start.
-- `SOUL.md` lives at `~/.astraclaw/SOUL.md`, is seeded on first run if missing, and acts as slot #1 of the system prompt when non-empty.
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
 - LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
 - Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` and `patch` reject any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
