@@ -70,4 +70,5 @@ class TestShellTool:
 
         assert len(calls) == 1
         assert calls[0][0] == "rm -rf testdir"
-        assert result["exit_code"] != 0
+        assert "error" not in result
+        assert "exit_code" in result

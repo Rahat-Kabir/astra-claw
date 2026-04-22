@@ -16,6 +16,8 @@ build/
 .vscode/
 .idea/
 .claude/
+.uv-cache/
+.uv-python/
 *.swp
 *.swo
 
