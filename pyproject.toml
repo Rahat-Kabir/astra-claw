@@ -5,8 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "astra-claw"
 version = "0.2.6"
-description = "AI agent with tool calling capabilities"
+description = "A terminal-first AI agent with tool calling for local development workflows"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Rahat Kabir", email = "Rahat-Kabir@users.noreply.github.com" }]
+keywords = ["ai", "agent", "llm", "cli", "tool-calling", "openai", "openrouter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "openai>=2.0.0",
     "prompt-toolkit>=3.0.0",
@@ -15,5 +32,13 @@ dependencies = [
     "rich>=13.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Rahat-Kabir/astra-claw"
+Repository = "https://github.com/Rahat-Kabir/astra-claw"
+Issues = "https://github.com/Rahat-Kabir/astra-claw/issues"
+
 [project.scripts]
 astraclaw = "astra_claw.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["astra_claw*"]
