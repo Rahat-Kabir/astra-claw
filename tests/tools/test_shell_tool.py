@@ -21,7 +21,7 @@ class TestShellTool:
         result = json.loads(
             run_command(
                 {
-                    "command": 'powershell -Command "Write-Error \'boom\'"',
+                    "command": 'python -c "import sys; sys.stderr.write(\'boom\')"',
                     "timeout": 5,
                 }
             )
@@ -33,7 +33,7 @@ class TestShellTool:
         result = json.loads(
             run_command(
                 {
-                    "command": 'powershell -Command "Start-Sleep -Seconds 2"',
+                    "command": 'python -c "import time; time.sleep(2)"',
                     "timeout": 1,
                 }
             )
