@@ -2,9 +2,35 @@
   <img src="img/astra_claw_banner.png" alt="Astra-Claw" width="720">
 </p>
 
+<p align="center">
+  <a href="https://github.com/Rahat-Kabir/astra-claw/actions/workflows/tests.yml">
+    <img src="https://github.com/Rahat-Kabir/astra-claw/actions/workflows/tests.yml/badge.svg" alt="tests">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license: MIT">
+  </a>
+  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="python: 3.11 | 3.12 | 3.13">
+</p>
+
 # Astra-Claw
 
-An AI agent with tool calling capabilities. Talk to it in the terminal - it can read files, answer questions, and take actions using tools.
+A terminal-first AI agent for local development workflows. It can inspect files, edit code, run shell commands, search previous sessions, and use optional web tools from a lightweight CLI.
+
+## Who It's For
+
+Astra-Claw is for developers who want a personal agent in the terminal that can help with real repo work without hiding the tool loop.
+
+It is best suited for:
+- local development workflows
+- repo exploration and code changes
+- iterative terminal-based collaboration
+- users who want visible tool usage and session history
+
+It is not designed as:
+- a secure sandbox
+- a hosted multi-user platform
+- a background autonomous production agent
+- a replacement for reviewing shell commands and code changes
 
 ## What It Does
 
@@ -28,10 +54,28 @@ An AI agent with tool calling capabilities. Talk to it in the terminal - it can 
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 - Live CLI feedback: dim dots spinner while thinking, one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
 
+## Safety And Limitations
+
+Astra-Claw is a local developer tool, not a secure sandbox.
+
+Important boundaries:
+- `shell` is powerful and can run arbitrary terminal commands
+- dangerous shell commands require explicit user approval
+- `--workspace <path>` fences `write_file` and `patch` to a single directory tree
+- `read_file` and `shell` are not fenced by `--workspace`
+- web tools are optional and only appear when `TAVILY_API_KEY` is set
+- `clarify` is CLI-only and depends on an interactive callback
+
+Practical implications:
+- use Astra-Claw in repos and directories you trust
+- use `--workspace` when you want safer file-edit testing
+- review shell actions and file changes before treating them as final
+- do not treat the current workspace fence as full isolation
+
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/astra-claw.git
+git clone https://github.com/Rahat-Kabir/astra-claw.git
 cd astra-claw
 python -m venv venv
 .\venv\Scripts\Activate.ps1    # Windows PowerShell
