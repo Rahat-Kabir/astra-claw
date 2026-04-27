@@ -1,11 +1,12 @@
 """Astra-Claw entry point.
 
 Usage:
-    python -m astra_claw                         # interactive mode (new session)
-    python -m astra_claw --session <id>          # resume a session
-    python -m astra_claw --sessions              # list recent sessions
-    python -m astra_claw --workspace <path>      # lock write_file to <path>
-    python -m astra_claw "read README.md"        # one-shot mode (no session)
+    astraclaw                                     # interactive mode (new session)
+    astraclaw setup [provider|key|model]          # interactive setup wizard
+    astraclaw --session <id>                      # resume a session
+    astraclaw --sessions                          # list recent sessions
+    astraclaw --workspace <path>                  # lock write_file to <path>
+    astraclaw "read README.md"                    # one-shot mode (no session)
 """
 
 import os
@@ -19,8 +20,12 @@ from .agent.loop import AstraAgent
 from .cli.repl import run_interactive_repl
 from .cli.ui import CliUI
 from .constants import set_workspace_fence
+from .llm import PROVIDER_KEY_ENV, resolve_api_key
 from .session import create_session, load_session, list_sessions
 from .tools.shell_tool import set_approval_callback
+
+
+SETUP_SECTIONS = {"provider", "key", "model"}
 
 
 def _apply_workspace_flag(argv: list) -> Path | None:
@@ -58,22 +63,91 @@ def _ask_approval(command: str, reason: str) -> bool:
     return answer in ("y", "yes")
 
 
+def _cmd_setup(argv: list) -> int:
+    """Run the setup wizard, optionally for a single section."""
+    section = None
+    if argv:
+        candidate = argv[0]
+        if candidate in SETUP_SECTIONS:
+            section = candidate
+        else:
+            print(f"Unknown setup section: {candidate}")
+            print(f"Available sections: {', '.join(sorted(SETUP_SECTIONS))}")
+            return 2
+    from .cli.setup import run_setup
+    return run_setup(section=section)
+
+
+def _has_usable_credentials() -> bool:
+    """Return True when an API key is reachable for the configured provider."""
+    try:
+        from .config import load_user_config
+    except Exception:
+        return False
+    user_cfg = load_user_config()
+    model_cfg = user_cfg.get("model") if isinstance(user_cfg, dict) else None
+    provider = (
+        (model_cfg or {}).get("provider")
+        if isinstance(model_cfg, dict)
+        else None
+    )
+    if not provider:
+        # No provider configured yet; check default env vars instead.
+        return any(os.getenv(env) for env in PROVIDER_KEY_ENV.values())
+    return bool(resolve_api_key(provider, model_cfg or {}))
+
+
+def _prompt_first_run_setup() -> bool:
+    """Ask the user whether to launch the setup wizard. Returns True if they did."""
+    print()
+    print("Astra-Claw isn't configured yet - no API key found.")
+    print("  Run:  astraclaw setup")
+    print()
+    if not sys.stdin.isatty():
+        print("Run 'astraclaw setup' from an interactive terminal to configure.")
+        return False
+    try:
+        answer = input("Run setup now? [Y/n]: ").strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        return False
+    if answer not in ("", "y", "yes"):
+        print("You can run 'astraclaw setup' at any time to configure.")
+        return False
+    from .cli.setup import run_setup
+    return run_setup() == 0
+
+
 def main():
     # Register the approval callback so shell tool can ask the user
     set_approval_callback(_ask_approval)
 
-    # Workspace fence flag must be handled first — it rewrites cwd and sys.argv.
+    # Workspace fence flag must be handled first - it rewrites cwd and sys.argv.
     workspace = _apply_workspace_flag(sys.argv)
+
+    # Subcommand: setup [section]
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        sys.exit(_cmd_setup(sys.argv[2:]))
 
     # --sessions flag: list recent sessions and exit
     if "--sessions" in sys.argv:
         CliUI().print_sessions(list_sessions())
         return
 
+    is_one_shot = len(sys.argv) > 1 and "--session" not in sys.argv
+    is_chat_mode = not is_one_shot
+
+    # First-run guard: in chat mode, offer the setup wizard when no key is set.
+    if is_chat_mode and not _has_usable_credentials():
+        if not _prompt_first_run_setup():
+            sys.exit(1)
+        # Re-check after wizard run; bail out cleanly if still unconfigured.
+        if not _has_usable_credentials():
+            sys.exit(1)
+
     agent = AstraAgent()
 
     # One-shot mode: no session persistence
-    if len(sys.argv) > 1 and "--session" not in sys.argv:
+    if is_one_shot:
         message = " ".join(sys.argv[1:])
         response, _ = agent.run_conversation(message)
         print(response)

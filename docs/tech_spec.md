@@ -277,6 +277,22 @@ __main__.py        (imports loop + cli + session)
 | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
 
+### Setup Wizard
+
+- `cli/setup.py` runs an interactive three-step wizard (provider, API key, default model)
+- Curated provider list is hardcoded: OpenAI and OpenRouter only; each provider has a small curated model list plus a `Custom model name` escape hatch
+- API key is validated by `llm.validate_credentials()` which pings `/models` with a 5-second timeout before saving; bad keys never reach disk
+- Output is persisted via `config.save_user_config()` which atomically merges the wizard's partial config into `~/.astraclaw/config.yaml` (only the keys the user changed; defaults stay implicit so future default updates still propagate)
+- Section flags (`astraclaw setup model | key | provider`) re-run a single step against the existing file; provider switches invalidate the stored API key for the previous provider
+- All prompts are dependency-injected (`input_fn`, `choice_fn`, `validate_fn`) so the wizard is unit-testable without real stdin or network calls
+
+### First-Run Guard
+
+- `__main__.py` calls `_has_usable_credentials()` before entering chat mode and offers to launch the setup wizard when no key is reachable
+- The guard runs only in chat mode (with or without `--session`); one-shot mode and `--sessions` skip it
+- A non-interactive stdin (no TTY) prints a one-line "configure manually" message and exits non-zero instead of hanging on `input()`
+- Credential resolution: `llm.resolve_api_key(provider, model_config)` prefers `model.api_key` from yaml, then falls back to the provider's environment variable
+
 ## Testing Strategy
 
 - `tests/test_features.py` covers core regressions for constants, config, registry behavior, and prompt assembly
@@ -294,5 +310,8 @@ __main__.py        (imports loop + cli + session)
 - `tests/agent/test_events.py` covers `AgentEvents` wiring: thinking toggles, tool start/complete ordering, `events=None` back-compat, and compaction silence
 - `tests/cli/test_tool_display.py` covers preview + summary helpers for all 7 tools plus error paths
 - `tests/agent/test_title_generator.py` covers title cleanup (quotes, prefix, truncation), silent-fail on exception, skip when already titled, daemon-thread wiring, and the `user_msg_count <= 2` gate
+- `tests/cli/test_setup.py` covers the full wizard, section flags, key validation, keep-existing-key, custom-model path, and provider-change key invalidation
+- `tests/test_config.py` covers `save_user_config()` partial overrides, merge-into-existing, and `load_user_config()` empty-file behavior
+- `tests/test_llm.py` covers `resolve_api_key()` precedence, `create_client()` explicit-key passthrough, and `validate_credentials()` success / unauthorized / timeout / empty-key paths
 - The full suite is run with `python -m pytest tests -v`
 - Focused commands and suite layout live in `docs/testing.md`

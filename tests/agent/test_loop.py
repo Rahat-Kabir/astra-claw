@@ -357,7 +357,7 @@ class TestAstraAgentLoop:
         ):
             with patch(
                 "astra_claw.agent.loop.create_client",
-                side_effect=lambda provider: clients[provider],
+                side_effect=lambda provider, api_key=None: clients[provider],
             ):
                 agent = AstraAgent()
                 text, new_messages = agent.run_conversation("hi")
@@ -376,7 +376,7 @@ class TestAstraAgentLoop:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             with patch(
                 "astra_claw.agent.loop.create_client",
-                side_effect=lambda provider: clients[provider],
+                side_effect=lambda provider, api_key=None: clients[provider],
             ):
                 agent = AstraAgent()
                 try:
@@ -390,7 +390,7 @@ class TestAstraAgentLoop:
             "openai": FailingClient([FakeLlmError("timeout while connecting")]),
         }
 
-        def create_client_side_effect(provider):
+        def create_client_side_effect(provider, api_key=None):
             if provider == "openrouter":
                 raise RuntimeError("No API key found. Set OPENROUTER_API_KEY environment variable.")
             return clients[provider]

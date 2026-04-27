@@ -83,7 +83,21 @@ python -m venv venv
 pip install -e .
 ```
 
-Set your API key:
+Configure your provider, API key, and default model:
+
+```bash
+astraclaw setup
+```
+
+Three-step wizard (provider -> key -> model). The key is validated against the provider's `/models` endpoint before being saved to `~/.astraclaw/config.yaml`. Re-run a single step at any time:
+
+```bash
+astraclaw setup model       # only re-pick the model
+astraclaw setup key         # only re-enter the API key
+astraclaw setup provider    # change provider (also re-prompts for key + model)
+```
+
+Prefer environment variables instead? Set the provider key directly and skip the wizard:
 
 ```bash
 # PowerShell
@@ -106,8 +120,10 @@ export TAVILY_API_KEY="tvly-..."
 Run:
 
 ```bash
-python -m astra_claw
+astraclaw
 ```
+
+If no API key is found on first chat run, Astra-Claw offers to launch the setup wizard for you.
 
 ## Usage
 
@@ -174,6 +190,7 @@ astra-claw/
 |   |-- cli/
 |   |   |-- commands.py       # slash command registry + autocomplete
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
+|   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
 |   |   `-- ui.py             # Rich output helpers + thinking spinner + tool line
 |   |-- agent/
@@ -212,6 +229,8 @@ astra-claw/
 
 ## Configuration
 
+Most users should run `astraclaw setup` once and never touch the yaml. The wizard asks three questions (provider, API key, default model), validates the key against the provider, and writes only the keys you change. You can also edit the file by hand at any time.
+
 User data lives in `~/.astraclaw/` by default:
 
 ```text
@@ -232,6 +251,7 @@ Override defaults by creating `~/.astraclaw/config.yaml`:
 model:
   default: gpt-5.4-mini
   provider: openai
+  api_key: sk-...                  # optional - falls back to OPENAI_API_KEY / OPENROUTER_API_KEY
   fallback_provider: openrouter
   fallback_model: gpt-5.4-mini
   context_window: 128000

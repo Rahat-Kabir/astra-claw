@@ -29,6 +29,7 @@ def generate_title(
     provider: str,
     model: str,
     timeout: float = 30.0,
+    api_key: Optional[str] = None,
 ) -> Optional[str]:
     """Generate a title from the first exchange. Returns None on failure."""
     user_snippet = (user_message or "")[:500]
@@ -50,6 +51,7 @@ def generate_title(
             max_tokens=30,
             temperature=0.3,
             timeout=timeout,
+            api_key=api_key,
         )
     except Exception as e:
         logger.debug("title generation failed: %s", e)
@@ -71,6 +73,7 @@ def auto_title_session(
     *,
     provider: str,
     model: str,
+    api_key: Optional[str] = None,
 ) -> None:
     """Generate a title and persist it if one isn't already set."""
     if not session_id:
@@ -83,7 +86,11 @@ def auto_title_session(
         return
 
     title = generate_title(
-        user_message, assistant_response, provider=provider, model=model
+        user_message,
+        assistant_response,
+        provider=provider,
+        model=model,
+        api_key=api_key,
     )
     if not title:
         return
@@ -104,6 +111,7 @@ def maybe_auto_title(
     provider: str,
     model: str,
     enabled: bool = True,
+    api_key: Optional[str] = None,
 ) -> Optional[threading.Thread]:
     """Fire-and-forget title generation after the first exchange.
 
@@ -119,7 +127,7 @@ def maybe_auto_title(
     thread = threading.Thread(
         target=auto_title_session,
         args=(session_id, user_message, assistant_response),
-        kwargs={"provider": provider, "model": model},
+        kwargs={"provider": provider, "model": model, "api_key": api_key},
         daemon=True,
         name="auto-title",
     )

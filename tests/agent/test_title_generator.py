@@ -193,6 +193,7 @@ class TestMaybeAutoTitle:
                 "hi there",
                 provider="openai",
                 model="gpt-x",
+                api_key=None,
             )
 
     def test_skips_when_user_count_exceeds_two(self):

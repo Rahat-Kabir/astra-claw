@@ -36,6 +36,9 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 ## Test Layout
 
 - `tests/test_features.py`: core regression tests for constants, config, registry, and prompt builder
+- `tests/test_config.py`: `load_user_config` / `save_user_config` partial-override and merge tests
+- `tests/test_llm.py`: `resolve_api_key` precedence and `validate_credentials` success/unauthorized/timeout paths
+- `tests/cli/test_setup.py`: setup wizard happy path, section flags, validation rejection, keep-existing-key, custom-model, provider-change key invalidation
 - `tests/test_soul.py`: SOUL.md seeding, loading, fallback, and truncation tests
 - `tests/agent/test_loop.py`: mocked loop tests, including provider fallback and stream callback behavior
 - `tests/agent/test_events.py`: `AgentEvents` hooks (thinking toggle, tool start/complete ordering, back-compat, compaction silence)

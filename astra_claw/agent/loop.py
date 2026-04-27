@@ -12,7 +12,7 @@ import json
 from typing import Any, Callable, Dict, List, Optional
 
 from ..config import load_config
-from ..llm import build_route, create_client, is_failover_worthy_error
+from ..llm import build_route, create_client, is_failover_worthy_error, resolve_api_key
 from ..memory import MemoryStore
 from .context_compactor import CompactionConfig, CompactionOutcome, ContextCompactor
 from .events import AgentEvents
@@ -67,6 +67,8 @@ class AstraAgent:
             self.fallback_route = None
 
         self._clients: Dict[str, Any] = {}
+        self._model_config = model_config
+        self.model_config = model_config
         self._get_client(self.primary_route["provider"])
 
         self.tools = registry.get_definitions(enabled_toolsets=self.enabled_toolsets)
@@ -88,7 +90,8 @@ class AstraAgent:
 
     def _get_client(self, provider: str) -> Any:
         if provider not in self._clients:
-            self._clients[provider] = create_client(provider)
+            api_key = resolve_api_key(provider, self._model_config)
+            self._clients[provider] = create_client(provider, api_key=api_key)
         return self._clients[provider]
 
     def _run_one_stream(

@@ -247,13 +247,33 @@ Why: give the agent live web lookup and page extraction without adding a larger 
 - [x] `tests/test_features.py` - added regression coverage for the lazy home-path fix
 - [x] User-verified focused pytest runs passed after the constants fix
 
+## v0.2.7 - Setup Wizard + First-Run Onboarding (2026-04-27)
+
+Why: make `pip install astra-claw` usable for public PyPI users without hand-editing yaml. New users hit a wizard, not a stack trace.
+
+### Completed
+
+- [x] `astra_claw/cli/setup.py` - three-step interactive wizard (provider, key, model) with section flags (`provider`, `key`, `model`), curated model lists for OpenAI and OpenRouter, custom-model escape hatch, keep-existing-key path, provider-change key invalidation, non-TTY guard
+- [x] `astra_claw/llm.py` - `resolve_api_key()` resolves yaml first then env; `validate_credentials()` pings `/models` with a 5s timeout; `create_client()` and `complete_once()` accept an optional `api_key` argument
+- [x] `astra_claw/config.py` - `load_user_config()` reads raw overrides; `save_user_config()` atomically merges partial config into `~/.astraclaw/config.yaml` (only changed keys; defaults stay implicit)
+- [x] `astra_claw/agent/loop.py` - `AstraAgent` now reads `model.api_key` from yaml when creating clients; exposes `model_config` for downstream callers
+- [x] `astra_claw/agent/title_generator.py` - threads `api_key` through to `complete_once` so auto-titles work when the key lives in yaml only
+- [x] `astra_claw/cli/repl.py` - resolves and passes the api key into `maybe_auto_title`
+- [x] `astra_claw/__main__.py` - subcommand router (`astraclaw setup [section]`) and first-run guard that auto-prompts the wizard in chat mode when no key is reachable
+- [x] `tests/cli/test_setup.py` - 7 tests covering full wizard, section flags, key validation, keep-existing-key, custom-model path, provider-change key invalidation, and unknown sections
+- [x] `tests/test_config.py` - 4 tests covering `save_user_config()` partial overrides, merge-into-existing, defaults overlay, and missing-file behavior
+- [x] `tests/test_llm.py` - 8 tests covering `resolve_api_key()` precedence, explicit-key passthrough, missing-key error, and `validate_credentials()` success / unauthorized / timeout / empty-key paths
+- [x] Updated existing `tests/agent/test_loop.py` and `tests/agent/test_title_generator.py` for the new `api_key=` signature
+- [x] Verified full suite: 291 passed
+- [x] Verified end-to-end smoke run: wizard wrote a clean yaml; first-run guard correctly detects missing keys and offers setup
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
 
 ## Planned
 
-### v0.2.7 - Skills System (MVP)
+### v0.2.8 - Skills System (MVP)
 
 Why: turn every new capability into a markdown file instead of Python code. Single biggest extensibility unlock.
 
@@ -263,7 +283,7 @@ Why: turn every new capability into a markdown file instead of Python code. Sing
 - [ ] `astra_claw/agent/prompt_builder.py` - slots active skill between SOUL and TOOL_POLICY
 - [ ] Tests + README skill-authoring section
 
-### v0.2.8 - Context References
+### v0.2.9 - Context References
 
 Why: cheap UX win for conversational file/session context. `@path/to/file.py` and `@session:<id>` expand inline.
 

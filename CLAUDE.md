@@ -42,16 +42,17 @@ source venv/bin/activate     # Git Bash / WSL
 ```text
 astra-claw/
 |-- astra_claw/
-|   |-- __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions, --workspace)
+|   |-- __main__.py           # entry: python -m astra_claw (interactive, one-shot, --session, --sessions, --workspace, setup [section])
 |   |-- constants.py          # get_astraclaw_home() + get_workspace_fence() - single source of truth
-|   |-- config.py             # DEFAULT_CONFIG + deep merge + ensure home
-|   |-- llm.py                # provider routing, client creation, and transient fallback policy
+|   |-- config.py             # DEFAULT_CONFIG + deep merge + load/save_user_config (atomic merge)
+|   |-- llm.py                # provider routing, client creation, transient fallback, resolve_api_key, validate_credentials
 |   |-- session.py            # JSONL session persistence + recent/search helpers
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
 |   |-- cli/
 |   |   |-- commands.py       # slash commands + prompt completion
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
+|   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
 |   |   `-- ui.py             # Rich banner/help/session/error rendering + thinking spinner + tool line
 |   |-- agent/
@@ -82,6 +83,8 @@ astra-claw/
 |   |-- test_session.py      # session persistence tests
 |   |-- test_soul.py         # SOUL.md seeding / loading / fallback tests
 |   |-- test_workspace.py    # --workspace flag + write_file fence tests
+|   |-- test_config.py       # load/save_user_config tests
+|   |-- test_llm.py          # resolve_api_key + validate_credentials tests
 |   `-- test_memory.py       # MemoryStore tests
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
@@ -142,6 +145,10 @@ __main__.py        (imports loop + cli + session)
 - Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` and `patch` reject any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
 - Session titles: `agent/title_generator.py` daemon-thread auto-titles from first exchange; REPL joins pending threads on exit (5s). Silent-fail. Disable via `session.auto_title: false`.
 - `llm.complete_once()` is the cheap non-streaming helper; prefers `max_completion_tokens`, falls back to `max_tokens`.
+- Setup wizard: `astraclaw setup [provider|key|model]` runs the three-step wizard in `cli/setup.py`. It writes overrides via `config.save_user_config()` (only changed keys; defaults stay implicit). The API key lives at `model.api_key` in `~/.astraclaw/config.yaml`; `llm.resolve_api_key()` prefers it, falling back to the provider env var.
+- First-run guard: in chat mode, `__main__.py` checks `_has_usable_credentials()` and offers to launch the wizard when no key is reachable. One-shot and `--sessions` modes skip the prompt.
+- Key validation: `llm.validate_credentials(provider, key)` pings `/models` with a 5s timeout and returns `(ok, message)`. The wizard uses this in Step 2 to fail fast on bad keys before saving.
+- Wizard prompts are dependency-injected (`input_fn`, `choice_fn`, `validate_fn`) so tests drive the wizard without real stdin or network calls.
 
 ## Must Follow
 

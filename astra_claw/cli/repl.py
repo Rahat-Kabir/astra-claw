@@ -13,6 +13,7 @@ from prompt_toolkit.styles import Style
 from ..agent.events import AgentEvents
 from ..agent.title_generator import maybe_auto_title
 from ..constants import get_astraclaw_home
+from ..llm import resolve_api_key
 from ..session import (
     archive_session,
     create_session,
@@ -305,6 +306,9 @@ def _maybe_schedule_auto_title(
     if not model:
         return None
 
+    model_config = getattr(agent, "model_config", None) or config.get("model", {})
+    api_key = resolve_api_key(provider, model_config) or None
+
     user_msg_count = sum(1 for m in history if m.get("role") == "user")
     return maybe_auto_title(
         session_id,
@@ -314,6 +318,7 @@ def _maybe_schedule_auto_title(
         provider=provider,
         model=model,
         enabled=True,
+        api_key=api_key,
     )
 
 
