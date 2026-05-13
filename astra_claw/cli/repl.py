@@ -23,7 +23,7 @@ from ..session import (
     save_message,
 )
 from .context_refs import expand_context_references
-from .commands import resolve_command, SlashCommandCompleter
+from .commands import resolve_command, AstraCompleter
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
 
@@ -34,7 +34,7 @@ def build_prompt_session() -> PromptSession:
     history_path.parent.mkdir(parents=True, exist_ok=True)
     return PromptSession(
         history=FileHistory(str(history_path)),
-        completer=SlashCommandCompleter(),
+        completer=AstraCompleter(),
         complete_while_typing=True,
         style=Style.from_dict({"prompt": "ansicyan bold"}),
     )

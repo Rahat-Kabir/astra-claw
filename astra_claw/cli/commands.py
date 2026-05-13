@@ -5,6 +5,8 @@ from typing import Iterable, Optional
 
 from prompt_toolkit.completion import Completer, Completion
 
+from .context_completion import ContextReferenceCompleter
+
 
 @dataclass(frozen=True)
 class CommandDef:
@@ -61,3 +63,15 @@ class SlashCommandCompleter(Completer):
                     display=name,
                     display_meta=description,
                 )
+
+
+class AstraCompleter(Completer):
+    """Complete slash commands and inline context references."""
+
+    def __init__(self) -> None:
+        self._slash = SlashCommandCompleter()
+        self._context_refs = ContextReferenceCompleter()
+
+    def get_completions(self, document, complete_event):
+        yield from self._slash.get_completions(document, complete_event)
+        yield from self._context_refs.get_completions(document, complete_event)
