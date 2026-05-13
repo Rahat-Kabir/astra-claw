@@ -1,11 +1,20 @@
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
 from rich.console import Console
 
+from astra_claw import constants
 from astra_claw.agent.context_compactor import CompactionOutcome
 from astra_claw.cli.repl import run_interactive_repl
 from astra_claw.cli.ui import CliUI
+
+
+@pytest.fixture(autouse=True)
+def _reset_fence():
+    constants._workspace_fence = None
+    yield
+    constants._workspace_fence = None
 
 
 class FakePromptSession:
@@ -113,6 +122,29 @@ def test_normal_prompt_calls_agent_with_stream_writer_and_saves_messages():
         ("session-1", {"role": "assistant", "content": "assistant response"}),
     ]
     assert "assistant response" in output.getvalue()
+
+
+def test_prompt_context_refs_are_expanded_before_agent_call(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    (tmp_path / "note.txt").write_text("attached context", encoding="utf-8")
+    agent = FakeAgent()
+    saved = []
+    ui, _ = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["Read @file:note.txt", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert len(agent.calls) == 1
+    assert "--- Attached Context ---" in agent.calls[0]["message"]
+    assert "attached context" in agent.calls[0]["message"]
+    assert saved[0][1]["content"] == agent.calls[0]["message"]
 
 
 def test_slash_commands_do_not_call_agent():

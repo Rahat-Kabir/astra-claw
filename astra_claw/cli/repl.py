@@ -22,6 +22,7 @@ from ..session import (
     rewrite_session,
     save_message,
 )
+from .context_refs import expand_context_references
 from .commands import resolve_command, SlashCommandCompleter
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
@@ -175,9 +176,13 @@ def _run_loop(
 
         events = _build_agent_events(cli_ui)
         clarify_callback = _build_clarify_callback(cli_ui, prompt)
+        expanded_message = expand_context_references(
+            message,
+            current_session_id=active_session_id,
+        )
         try:
             response, new_messages = agent.run_conversation(
-                message,
+                expanded_message,
                 conversation_history=active_history,
                 stream_writer=cli_ui.stream_token,
                 events=events,

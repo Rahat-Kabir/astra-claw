@@ -267,13 +267,27 @@ Why: make `pip install astra-claw` usable for public PyPI users without hand-edi
 - [x] Verified full suite: 291 passed
 - [x] Verified end-to-end smoke run: wizard wrote a clean yaml; first-run guard correctly detects missing keys and offers setup
 
+## v0.2.8 - Context References (2026-05-13)
+
+Why: let users attach precise file, folder, diff, and past-session context inline without spending a tool turn.
+
+### Completed
+
+- [x] `astra_claw/cli/context_refs.py` - expands `@file:`, `@file:<path>:<line-range>`, `@folder:`, `@diff`, and `@session:` into an `--- Attached Context ---` block before agent turns
+- [x] `astra_claw/cli/repl.py` and `astra_claw/__main__.py` - apply context-reference expansion in interactive and one-shot modes
+- [x] `astra_claw/tools/path_safety.py` - exposes shared sensitive-path checks for read attachments while preserving existing write safety
+- [x] Output caps, binary-file rejection, current-session rejection, workspace-fence checks, and warning blocks for missing/blocked refs
+- [x] `tests/cli/test_context_refs.py` plus REPL plumbing coverage
+- [x] Verified focused suite: `python -m pytest tests\cli\test_context_refs.py tests\cli\test_repl.py -q` -> 24 passed
+- [x] Verified full suite: `python -m pytest tests -q` -> 305 passed
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
 
 ## Planned
 
-### v0.2.8 - Skills System (MVP)
+### v0.2.9 - Skills System (MVP)
 
 Why: turn every new capability into a markdown file instead of Python code. Single biggest extensibility unlock.
 
@@ -282,14 +296,6 @@ Why: turn every new capability into a markdown file instead of Python code. Sing
 - [ ] `/skill <name>` slash command in `cli/commands.py` - activates one skill for the rest of the session
 - [ ] `astra_claw/agent/prompt_builder.py` - slots active skill between SOUL and TOOL_POLICY
 - [ ] Tests + README skill-authoring section
-
-### v0.2.9 - Context References
-
-Why: cheap UX win for conversational file/session context. `@path/to/file.py` and `@session:<id>` expand inline.
-
-- [ ] `astra_claw/cli/context_refs.py` - tokenize user input, expand `@file` / `@session:` refs before sending to agent
-- [ ] Size caps per reference (to avoid blowing the prompt)
-- [ ] Tests for expansion, escaping, size capping
 
 ### v0.3.0 - Delegation / Sub-agents (chapter theme)
 

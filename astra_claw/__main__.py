@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load .env file before anything reads env vars
 
 from .agent.loop import AstraAgent
+from .cli.context_refs import expand_context_references
 from .cli.repl import run_interactive_repl
 from .cli.ui import CliUI
 from .constants import set_workspace_fence
@@ -149,6 +150,7 @@ def main():
     # One-shot mode: no session persistence
     if is_one_shot:
         message = " ".join(sys.argv[1:])
+        message = expand_context_references(message)
         response, _ = agent.run_conversation(message)
         print(response)
         return

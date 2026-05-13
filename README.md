@@ -39,6 +39,7 @@ It is not designed as:
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
+- Expands inline context references (`@file:`, `@folder:`, `@diff`, `@session:`) before agent turns
 - Searches the web via `web_search` and extracts pages via `web_extract` (Tavily-backed, hidden unless `TAVILY_API_KEY` is set)
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
@@ -142,6 +143,18 @@ Hello! How can I help you?
 
 Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/exit`, `/quit`.
 
+Attach local context inline:
+
+```text
+astra> summarize @file:README.md
+astra> review @file:astra_claw/cli/repl.py:100-190
+astra> what changed? @diff
+astra> show me the CLI tree @folder:astra_claw/cli
+astra> recall @session:2026-04-21_abcd1234
+```
+
+Context refs are expanded before the model call, capped for size, and blocked for sensitive paths.
+
 Resume a session:
 
 ```text
@@ -189,6 +202,7 @@ astra-claw/
 |   |-- soul.py               # SOUL.md loader + first-run seeding
 |   |-- cli/
 |   |   |-- commands.py       # slash command registry + autocomplete
+|   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback

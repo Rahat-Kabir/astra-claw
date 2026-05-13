@@ -19,14 +19,19 @@ BLOCKED_PATTERNS = [
 ]
 
 
-def is_write_blocked(filepath: Path) -> bool:
-    """Return True when filepath targets a protected path."""
+def is_sensitive_path(filepath: Path) -> bool:
+    """Return True when filepath targets a credential-like or protected path."""
     parts = filepath.resolve().parts
     name = filepath.name
     for pattern in BLOCKED_PATTERNS:
         if pattern == name or pattern in parts:
             return True
     return False
+
+
+def is_write_blocked(filepath: Path) -> bool:
+    """Return True when filepath targets a protected path."""
+    return is_sensitive_path(filepath)
 
 
 def inside_workspace_fence(filepath: Path) -> bool:

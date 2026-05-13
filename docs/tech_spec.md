@@ -134,6 +134,17 @@ Final Response
 - When no callback is provided, the agent keeps the old stdout streaming behavior
 - `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
 
+### Context References
+
+- `astra_claw/cli/context_refs.py` expands inline refs before user text reaches `AstraAgent.run_conversation()`
+- Supported refs: `@file:path`, `@file:path:10-25`, `@folder:path`, `@diff`, and `@session:<id>`
+- Interactive mode expands refs in `cli/repl.py`; one-shot mode expands refs in `__main__.py`
+- Expanded content is appended under `--- Attached Context ---` so the original prompt remains visible
+- File and folder refs resolve inside `get_workspace_fence()`, reject sensitive paths via `tools/path_safety.py`, reject binary/non-UTF-8 file content, and cap output sizes
+- `@folder:` emits a bounded tree listing only; it does not read every file in the folder
+- `@diff` runs `git diff --no-ext-diff -- .` from the workspace fence and attaches the unstaged diff
+- `@session:` loads a past JSONL transcript via `session.load_session()` and rejects attaching the current session to itself
+
 ### Live Feedback Surface
 
 - `agent/events.py` defines `AgentEvents` (frozen dataclass) with three optional hooks: `on_thinking(active)`, `on_tool_start(call_id, name, args)`, `on_tool_complete(call_id, name, args, result)`
@@ -211,6 +222,7 @@ Final Response
 - `patch` performs exact text replacement on existing files, requires a unique match unless `replace_all=true`, and returns a unified diff
 - File-writing tools block writes to sensitive paths such as `.env`, `.git`, `.ssh`, and credential-like filenames
 - Blocked patterns are checked against the resolved path parts
+- Context references reuse the sensitive-path blocklist for read attachments, while `read_file` itself remains an unfenced tool
 - Workspace fence runs **before** the blocklist: when `--workspace <path>` is passed, writing tools reject any resolved path that does not sit under `get_workspace_fence()`. Fence is unset by default and falls back to cwd, so existing behavior is preserved when the flag is absent.
 - Fence scope is intentionally narrow: only writing tools are jailed. `read_file` stays unfenced (reads are non-destructive) and `shell` is unfenced (chdir inheritance already scopes normal commands; fully jailing shell args is out of scope because of Windows quoting + pipes + redirects). The dangerous-command approval callback remains the defense for destructive shell usage.
 
@@ -252,8 +264,9 @@ agent/streaming.py (no agent-local deps; iterates SDK stream + on_thinking)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.session_search_tool, tools.registry, events)
 agent/title_generator.py (imports llm, session)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
+cli/context_refs.py (imports constants, session, tools.path_safety)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -303,7 +316,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/tools/test_patch_tool.py` covers exact replacement, deletion, no-match, multi-match, `replace_all`, protected paths, workspace escapes, and schema registration
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
-- `tests/cli/` covers slash commands, completion, REPL routing, session switching, and stream callback use
+- `tests/cli/` covers slash commands, completion, REPL routing, context-reference expansion, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, session-search behavior, and the memory tool wrapper
 - `tests/tools/test_web_tools.py` covers Tavily schema gating, normalization, truncation, and validation errors
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls

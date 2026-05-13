@@ -54,6 +54,7 @@ astra-claw/
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
 |   |-- cli/
 |   |   |-- commands.py       # slash commands + prompt completion
+|   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion before agent turns
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
@@ -112,8 +113,9 @@ agent/events.py    (no deps)
 agent/streaming.py (no agent-local deps)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_tool, tools.registry, agent.events)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
+cli/context_refs.py (imports constants, session, tools.path_safety)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.tool_display)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -133,6 +135,7 @@ __main__.py        (imports loop + cli + session)
 - Stream iteration lives in `agent/streaming.py` and the per-tool dispatch batch lives in `agent/tool_runner.py`; keep `agent/loop.py` focused on orchestration (system prompt + compaction + turn loop).
 - Compaction summary calls must pass `on_thinking=None` so the user's spinner only tracks user-facing turns.
 - CLI tool-call feedback logic belongs in `cli/tool_display.py` (pure) and `cli/ui.py` (Rich); do not print tool previews or summaries from inside the agent loop.
+- Context reference expansion belongs in `cli/context_refs.py` and runs before user text reaches `run_conversation()`. Supported refs are `@file:`, `@folder:`, `@diff`, and `@session:`; keep expansion bounded and block sensitive paths.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
