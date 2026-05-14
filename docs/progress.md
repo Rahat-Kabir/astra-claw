@@ -281,6 +281,20 @@ Why: let users attach precise file, folder, diff, and past-session context inlin
 - [x] Verified focused suite: `python -m pytest tests\cli\test_context_refs.py tests\cli\test_repl.py -q` -> 24 passed
 - [x] Verified full suite: `python -m pytest tests -q` -> 305 passed
 
+## v0.2.9 - Heartbeat Spinner (2026-05-14)
+
+Why: long autonomous turns felt frozen - a static "Thinking" spinner gave no signal that the agent was alive, working, or how deep in a tool loop it was.
+
+### Completed
+
+- [x] `astra_claw/cli/ui.py` - heartbeat state on `CliUI` (`_hb_started`, `_hb_tools`, `_hb_tokens`, `_hb_label`) with `_fmt_elapsed` / `_fmt_tokens` helpers
+- [x] `start_thinking(label)` starts or resumes preserving counters; new `pause_thinking()` hides the spinner without resetting state so streamed tokens print cleanly; `stop_thinking()` does the full reset at turn end
+- [x] `bump_tool()`, `bump_tokens(n)`, `set_heartbeat_label(label)` mutate counters between events; 0.5s daemon-thread tick advances elapsed time during silent gaps
+- [x] Render format: `<label> · <N> tools · <elapsed> · ~<tokens> tok` (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`)
+- [x] `astra_claw/cli/repl.py` - `on_thinking(False)` pauses instead of stopping, `on_tool_complete` pauses + bumps tool counter + relabels to `thinking`, `stream_writer` wrapped to call `bump_tokens(len(token) // 4)`
+- [x] `tests/cli/test_ui_heartbeat.py` - 15 tests covering formatters, render output, counter bumps, pause/resume state preservation, full reset on stop
+- [x] Verified full suite: `python -m pytest -q` -> 329 passed
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
@@ -288,7 +302,7 @@ Why: let users attach precise file, folder, diff, and past-session context inlin
 
 ## Planned
 
-### v0.2.9 - Skills System (MVP)
+### v0.2.10 - Skills System (MVP)
 
 Why: turn every new capability into a markdown file instead of Python code. Single biggest extensibility unlock.
 

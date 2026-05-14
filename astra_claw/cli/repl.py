@@ -180,11 +180,16 @@ def _run_loop(
             message,
             current_session_id=active_session_id,
         )
+
+        def _stream_writer(token: str) -> None:
+            cli_ui.bump_tokens(max(1, len(token) // 4))
+            cli_ui.stream_token(token)
+
         try:
             response, new_messages = agent.run_conversation(
                 expanded_message,
                 conversation_history=active_history,
-                stream_writer=cli_ui.stream_token,
+                stream_writer=_stream_writer,
                 events=events,
                 clarify_callback=clarify_callback,
                 current_session_id=active_session_id,
@@ -232,19 +237,21 @@ def _build_agent_events(cli_ui: CliUI) -> AgentEvents:
 
     def on_thinking(active: bool) -> None:
         if active:
-            cli_ui.start_thinking("Thinking")
+            cli_ui.start_thinking("thinking")
         else:
-            cli_ui.stop_thinking()
+            cli_ui.pause_thinking()
 
     def on_tool_start(call_id: str, name: str, args: dict) -> None:
         preview = build_tool_preview(name, args)
-        label = f"Running {name}"
+        label = f"running {name}"
         if preview:
             label += f" {preview}"
         cli_ui.start_thinking(label)
 
     def on_tool_complete(call_id: str, name: str, args: dict, result: str) -> None:
-        cli_ui.stop_thinking()
+        cli_ui.pause_thinking()
+        cli_ui.bump_tool()
+        cli_ui.set_heartbeat_label("thinking")
         preview = build_tool_preview(name, args)
         summary = summarize_tool_result(name, result)
         cli_ui.print_tool_line(name, preview, summary)

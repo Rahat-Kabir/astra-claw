@@ -58,7 +58,7 @@ astra-claw/
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
-|   |   `-- ui.py             # Rich banner/help/session/error rendering + thinking spinner + tool line
+|   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # persistent history compaction rules + token estimation
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)

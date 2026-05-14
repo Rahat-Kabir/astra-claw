@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-05-14
+
+### Changed
+- CLI spinner is now a heartbeat: shows running tool count, elapsed time, and a rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`). Time advances during silent gaps via a 0.5s tick, and counters survive across streaming/tool boundaries within a turn.
+
 ## [0.2.6] - 2026-04-22
 
 Initial public release.

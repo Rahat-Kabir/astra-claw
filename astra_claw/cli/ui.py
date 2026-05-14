@@ -1,5 +1,7 @@
 """Light Rich rendering helpers for the interactive CLI."""
 
+import threading
+import time
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
 
@@ -12,12 +14,35 @@ from rich.table import Table
 from .commands import COMMANDS, CommandDef
 
 
+def _fmt_elapsed(secs: float) -> str:
+    s = int(max(secs, 0))
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m{s % 60:02d}s"
+    return f"{s // 3600}h{(s % 3600) // 60:02d}m"
+
+
+def _fmt_tokens(n: int) -> str:
+    if n >= 10_000:
+        return f"{n // 1000}k"
+    if n >= 1000:
+        return f"{n / 1000:.1f}k"
+    return str(n)
+
+
 class CliUI:
     """Small wrapper around Rich so REPL logic stays testable."""
 
     def __init__(self, console: Optional[Console] = None):
         self.console = console or Console()
         self._status: Optional[Status] = None
+        self._hb_started: Optional[float] = None
+        self._hb_tools: int = 0
+        self._hb_tokens: int = 0
+        self._hb_label: str = "thinking"
+        self._hb_stop: threading.Event = threading.Event()
+        self._hb_thread: Optional[threading.Thread] = None
 
     def print_banner(
         self,
@@ -106,23 +131,92 @@ class CliUI:
 
     # --- Live feedback during agent work --------------------------------
 
-    def start_thinking(self, label: str = "Thinking") -> None:
-        """Show (or replace) a single dim dots spinner with `label`."""
-        self.stop_thinking()
+    def start_thinking(self, label: str = "thinking") -> None:
+        """Start, resume, or relabel the heartbeat spinner.
+
+        Counters (tools, tokens, elapsed start) persist across pause/resume so
+        the turn-level totals survive streaming gaps.
+        """
+        if self._status is not None:
+            self._hb_label = label
+            self._refresh_heartbeat()
+            return
+        if self._hb_started is None:
+            self._hb_started = time.monotonic()
+            self._hb_tools = 0
+            self._hb_tokens = 0
+        self._hb_label = label
         self._status = self.console.status(
-            f"[dim]{escape(label)}[/dim]",
+            self._render_heartbeat(),
             spinner="dots",
             spinner_style="dim",
         )
         self._status.start()
+        self._hb_stop = threading.Event()
+        self._hb_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._hb_thread.start()
 
-    def stop_thinking(self) -> None:
-        """Hide the current spinner if any. Safe to call repeatedly."""
+    def pause_thinking(self) -> None:
+        """Hide the spinner without resetting counters, so output can stream cleanly.
+
+        A later `start_thinking` resumes with the same elapsed start and totals.
+        """
+        self._hb_stop.set()
+        thread = self._hb_thread
+        self._hb_thread = None
+        if thread is not None:
+            thread.join(timeout=0.5)
         if self._status is not None:
             try:
                 self._status.stop()
             finally:
                 self._status = None
+
+    def stop_thinking(self) -> None:
+        """Hide the spinner and reset heartbeat state. Safe to call repeatedly."""
+        self.pause_thinking()
+        self._hb_started = None
+        self._hb_tools = 0
+        self._hb_tokens = 0
+        self._hb_label = "thinking"
+
+    def bump_tool(self) -> None:
+        """Increment the completed-tool counter on the heartbeat."""
+        self._hb_tools += 1
+        self._refresh_heartbeat()
+
+    def bump_tokens(self, n: int) -> None:
+        """Add to the rough streamed-token estimate. No-op for non-positive n."""
+        if n <= 0:
+            return
+        self._hb_tokens += n
+
+    def set_heartbeat_label(self, label: str) -> None:
+        """Update the leading text of the heartbeat (e.g. when a tool starts)."""
+        self._hb_label = label
+        self._refresh_heartbeat()
+
+    def _render_heartbeat(self) -> str:
+        parts = [self._hb_label]
+        if self._hb_tools:
+            parts.append(f"{self._hb_tools} tool{'s' if self._hb_tools != 1 else ''}")
+        if self._hb_started is not None:
+            parts.append(_fmt_elapsed(time.monotonic() - self._hb_started))
+        if self._hb_tokens:
+            parts.append(f"~{_fmt_tokens(self._hb_tokens)} tok")
+        return f"[dim]{escape(' · '.join(parts))}[/dim]"
+
+    def _refresh_heartbeat(self) -> None:
+        if self._status is None:
+            return
+        try:
+            self._status.update(self._render_heartbeat())
+        except Exception:
+            pass
+
+    def _heartbeat_loop(self) -> None:
+        while not self._hb_stop.wait(0.5):
+            self._refresh_heartbeat()
 
     def print_clarify_question(
         self,

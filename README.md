@@ -53,7 +53,7 @@ It is not designed as:
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
 - Persistent context compaction for long sessions with manual `/compact` and automatic preflight compaction
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
-- Live CLI feedback: dim dots spinner while thinking, one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
+- Live CLI feedback: heartbeat spinner with elapsed time, tool count, and rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`), one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
 
 ## Safety And Limitations
 
@@ -206,7 +206,7 @@ astra-claw/
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
-|   |   `-- ui.py             # Rich output helpers + thinking spinner + tool line
+|   |   `-- ui.py             # Rich output helpers + heartbeat spinner + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # history compaction rules + token estimation
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
