@@ -1,6 +1,4 @@
 """System prompt assembly for Astra-Claw.
-
-MVP: hardcoded identity. Later: load from SOUL.md, inject memory, context files.
 """
 
 import os

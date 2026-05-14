@@ -284,6 +284,7 @@ Why: let users attach precise file, folder, diff, and past-session context inlin
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
+- [ ] Context-ref preview + fuzzy picker: show file/folder/diff/session summaries while typing `@`, and make partial matches easier to select.
 
 ## Planned
 
