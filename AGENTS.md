@@ -159,3 +159,11 @@ __main__.py        (imports loop + cli + session)
 ## Must Follow
 
 - **Take permission** before editing.
+
+## Cursor Cloud specific instructions
+
+- **Activate venv first**: always run `source /workspace/venv/bin/activate` before any Python command.
+- **Tests**: `python -m pytest tests -v` — all 329 tests are fully mocked and need no API keys or network.
+- **No linter configured**: CI only runs `pytest`; there is no ruff/flake8/mypy/pyright in this repo.
+- **CLI without an API key**: `astraclaw --sessions` and `astraclaw setup` work without credentials. Interactive chat and one-shot mode require `OPENAI_API_KEY` or `OPENROUTER_API_KEY`.
+- **`python3.12-venv`**: the base VM image may not have this package; the update script installs it. If venv creation fails, run `sudo apt-get install -y python3.12-venv`.
