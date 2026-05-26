@@ -100,6 +100,24 @@ class CliUI:
             )
         self.console.print(table)
 
+    def print_skills(self, skills: Iterable[object]) -> None:
+        skills = list(skills)
+        if not skills:
+            self.print_warning("No skills installed.")
+            self.console.print("Create one at ~/.astraclaw/skills/<name>/SKILL.md")
+            return
+
+        table = Table(title="Installed Skills")
+        table.add_column("Name", style="cyan")
+        table.add_column("Description")
+        table.add_column("Command", style="dim")
+        for skill in skills:
+            name = str(getattr(skill, "name", ""))
+            description = str(getattr(skill, "description", ""))
+            command = str(getattr(skill, "command", ""))
+            table.add_row(name, description or "-", command)
+        self.console.print(table)
+
     def print_error(self, message: str) -> None:
         self.console.print(f"[red]{message}[/red]")
 

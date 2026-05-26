@@ -1,0 +1,151 @@
+from pathlib import Path
+
+import pytest
+
+from astra_claw.cli.skills import (
+    SkillInfo,
+    build_skill_invocation_message,
+    build_skills_index,
+    find_skill,
+    list_skills,
+    parse_skill_file,
+)
+
+
+def _write_skill(root: Path, relative_dir: str, content: str) -> Path:
+    skill_dir = root / "skills" / relative_dir
+    skill_dir.mkdir(parents=True)
+    path = skill_dir / "SKILL.md"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def test_parse_skill_file_uses_frontmatter(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    path = _write_skill(
+        tmp_path,
+        "code-review",
+        """---
+name: Code Review
+description: Review code changes for bugs.
+---
+
+# Code Review
+
+Start with findings.
+""",
+    )
+
+    assert parse_skill_file(path) == SkillInfo(
+        name="code-review",
+        description="Review code changes for bugs.",
+        path=path,
+        command="/skill code-review",
+    )
+
+
+def test_parse_skill_file_falls_back_to_folder_and_body(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    path = _write_skill(
+        tmp_path,
+        "debug-python",
+        """# Debug Python
+
+Investigate tracebacks and failing tests.
+""",
+    )
+
+    info = parse_skill_file(path)
+
+    assert info.name == "debug-python"
+    assert info.description == "Investigate tracebacks and failing tests."
+
+
+def test_list_skills_discovers_nested_skills(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    _write_skill(tmp_path, "software/code-review", "description: ignored\n")
+    _write_skill(
+        tmp_path,
+        "writing/release-notes",
+        """---
+name: release-notes
+description: Write release notes.
+---
+""",
+    )
+
+    names = [skill.name for skill in list_skills()]
+
+    assert names == ["code-review", "release-notes"]
+
+
+def test_find_skill_accepts_slug_variants(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    _write_skill(
+        tmp_path,
+        "code-review",
+        """---
+name: Code Review
+---
+""",
+    )
+
+    assert find_skill("code_review").name == "code-review"
+    assert find_skill("Code Review").name == "code-review"
+    assert find_skill("missing") is None
+
+
+def test_build_skill_invocation_message_loads_full_content(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    _write_skill(
+        tmp_path,
+        "code-review",
+        """---
+name: code-review
+description: Review code.
+---
+
+# Code Review
+
+Start with findings.
+""",
+    )
+
+    message = build_skill_invocation_message("code-review", "review @diff")
+
+    assert 'The user invoked the "code-review" skill' in message
+    assert '<skill name="code-review">' in message
+    assert "Start with findings." in message
+    assert "User request:\nreview @diff" in message
+
+
+def test_build_skill_invocation_message_rejects_missing_skill(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+
+    with pytest.raises(ValueError, match="Unknown skill"):
+        build_skill_invocation_message("missing", "do it")
+
+
+def test_build_skills_index_lists_available_skills(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    _write_skill(
+        tmp_path,
+        "code-review",
+        """---
+name: code-review
+description: Review code.
+---
+""",
+    )
+
+    index = build_skills_index()
+
+    assert "## Skills" in index
+    assert "- code-review: Review code." in index
+    assert "<available_skills>" in index
+
+
+def test_build_skills_index_empty_when_no_skills(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+
+    assert build_skills_index() == ""

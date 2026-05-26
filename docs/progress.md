@@ -295,22 +295,25 @@ Why: long autonomous turns felt frozen - a static "Thinking" spinner gave no sig
 - [x] `tests/cli/test_ui_heartbeat.py` - 15 tests covering formatters, render output, counter bumps, pause/resume state preservation, full reset on stop
 - [x] Verified full suite: `python -m pytest -q` -> 329 passed
 
+## v0.2.10 - Lightweight Skills (2026-05-26)
+
+Why: let users store reusable task workflows as markdown and invoke them from the CLI without adding Python code.
+
+### Completed
+
+- [x] `astra_claw/cli/skills.py` - discovers `~/.astraclaw/skills/**/SKILL.md`, parses simple `name` / `description` frontmatter, slugifies names, caps skill file reads, and builds one-turn invocation messages
+- [x] `astra_claw/cli/commands.py` / `cli/repl.py` / `cli/ui.py` - added `/skills` listing and `/skill <name> <request>` one-turn skill loading
+- [x] `astra_claw/agent/prompt_builder.py` - appends a compact installed-skills index while keeping full skill bodies out of the system prompt until invoked
+- [x] `tests/cli/test_skills.py` plus command, REPL, and prompt-builder coverage
+- [x] Verified focused suite: `uv run --with pytest pytest tests/cli/test_commands.py tests/cli/test_skills.py tests/cli/test_repl.py tests/test_features.py` -> 58 passed
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
 - [ ] Context-ref preview + fuzzy picker: show file/folder/diff/session summaries while typing `@`, and make partial matches easier to select.
+- [ ] Skills v2: optional install/update flow, richer frontmatter, or automatic skill suggestion.
 
 ## Planned
-
-### v0.2.10 - Skills System (MVP)
-
-Why: turn every new capability into a markdown file instead of Python code. Single biggest extensibility unlock.
-
-- [ ] `~/.astraclaw/skills/<name>/SKILL.md` convention (markdown with optional frontmatter)
-- [ ] `astra_claw/skills.py` loader: scans directory, validates safely (same prompt-injection scan as SOUL.md)
-- [ ] `/skill <name>` slash command in `cli/commands.py` - activates one skill for the rest of the session
-- [ ] `astra_claw/agent/prompt_builder.py` - slots active skill between SOUL and TOOL_POLICY
-- [ ] Tests + README skill-authoring section
 
 ### v0.3.0 - Delegation / Sub-agents (chapter theme)
 

@@ -11,7 +11,15 @@ def _completion_texts(text: str) -> list[str]:
 def test_command_registry_contains_core_commands():
     names = [command.name for command in COMMANDS]
 
-    assert names == ["/help", "/sessions", "/new", "/compact", "/exit"]
+    assert names == [
+        "/help",
+        "/sessions",
+        "/new",
+        "/compact",
+        "/skills",
+        "/skill",
+        "/exit",
+    ]
 
 
 def test_quit_alias_resolves_to_exit():
@@ -23,6 +31,11 @@ def test_quit_alias_resolves_to_exit():
 
 def test_slash_completer_suggests_matching_commands():
     assert "/help" in _completion_texts("/he")
+
+
+def test_slash_completer_suggests_skill_commands():
+    assert "/skill" in _completion_texts("/ski")
+    assert "/skills" in _completion_texts("/ski")
 
 
 def test_slash_completer_includes_aliases():

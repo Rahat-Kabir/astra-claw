@@ -6,6 +6,7 @@ import platform
 
 from .. import constants
 from ..constants import get_workspace_fence
+from ..cli.skills import build_skills_index
 from ..soul import load_soul_md
 
 DEFAULT_IDENTITY = """You are Astra-Claw, an AI agent that can take actions using tools.
@@ -78,5 +79,9 @@ def build_system_prompt(memory_store=None, include_memory_hint=None) -> str:
         memory_block = memory_store.format_for_system_prompt("memory")
         if memory_block:
             parts.append(memory_block)
+
+    skills_index = build_skills_index()
+    if skills_index:
+        parts.append(skills_index)
 
     return "\n\n".join(parts)

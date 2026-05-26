@@ -166,6 +166,90 @@ def test_slash_commands_do_not_call_agent():
     assert "session-1" in rendered
 
 
+def test_skills_command_lists_installed_skills(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    skill_dir = tmp_path / "skills" / "code-review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: code-review
+description: Review code changes.
+---
+""",
+        encoding="utf-8",
+    )
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/skills", "/exit"]),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    rendered = output.getvalue()
+    assert agent.calls == []
+    assert "Installed Skills" in rendered
+    assert "code-review" in rendered
+    assert "Review code changes." in rendered
+
+
+def test_skill_command_loads_skill_and_calls_agent(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    skill_dir = tmp_path / "skills" / "code-review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: code-review
+description: Review code changes.
+---
+
+# Code Review
+
+Start with findings.
+""",
+        encoding="utf-8",
+    )
+    agent = FakeAgent()
+    saved = []
+    ui, _ = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/skill code-review review this", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert len(agent.calls) == 1
+    message = agent.calls[0]["message"]
+    assert 'The user invoked the "code-review" skill' in message
+    assert "<skill name=\"code-review\">" in message
+    assert "Start with findings." in message
+    assert "User request:\nreview this" in message
+    assert saved[0][1]["content"] == message
+
+
+def test_skill_command_missing_args_does_not_call_agent():
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/skill code-review", "/exit"]),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert "Usage: /skill <name> <request>" in output.getvalue()
+
+
 def test_new_command_creates_session_and_clears_history_before_next_message():
     agent = FakeAgent()
     saved = []

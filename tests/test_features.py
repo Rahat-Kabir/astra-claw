@@ -228,6 +228,24 @@ class TestPromptBuilder:
         assert "cmd-compatible" in prompt
         assert "findstr" in prompt
 
+    def test_includes_skills_index_when_skills_exist(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+        skill_dir = tmp_path / "skills" / "code-review"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: code-review
+description: Review code changes.
+---
+""",
+            encoding="utf-8",
+        )
+
+        prompt = build_system_prompt()
+
+        assert "## Skills" in prompt
+        assert "- code-review: Review code changes." in prompt
+
 
 class TestGlobalRegistry:
     def test_read_file_registered(self):

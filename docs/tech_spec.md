@@ -129,10 +129,19 @@ Final Response
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
 - Rich is used for light output: startup banner, help, session table, warnings, errors, and the live feedback spinner
-- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/exit`, `/quit`) are handled locally and are not sent to the LLM
+- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; `/skill` rewrites the prompt before the LLM call, and the others are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior
 - `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
+
+### Lightweight Skills
+
+- Skills are user-owned markdown files at `~/.astraclaw/skills/**/SKILL.md`
+- `cli/skills.py` scans recursively, skips noisy dependency/cache folders, caps each skill file at 64 KB, and parses simple optional frontmatter keys (`name`, `description`)
+- `list_skills()` returns unique slugified skill metadata; `build_skills_index()` renders a compact `<available_skills>` prompt block
+- `prompt_builder.py` appends only the compact skill index to the system prompt, keeping full skill bodies out of the prompt unless invoked
+- `/skills` lists installed skills in the CLI; `/skill <name> <request>` wraps the full `SKILL.md` body and user request into one turn, then still passes through context-reference expansion
+- v0.2.10 is explicit invocation only: no automatic skill selection, no skill install/update hub, and no persistent active-skill session state
 
 ### Context References
 
@@ -265,8 +274,9 @@ agent/tool_runner.py (imports memory, tools.memory_tool, tools.todo_tool, tools.
 agent/title_generator.py (imports llm, session)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/context_refs.py (imports constants, session, tools.path_safety)
+cli/skills.py       (imports constants; no Rich or prompt_toolkit)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.skills, cli.tool_display)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -316,7 +326,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/tools/test_patch_tool.py` covers exact replacement, deletion, no-match, multi-match, `replace_all`, protected paths, workspace escapes, and schema registration
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
-- `tests/cli/` covers slash commands, completion, REPL routing, context-reference expansion, session switching, and stream callback use
+- `tests/cli/` covers slash commands, completion, skill discovery/invocation, REPL routing, context-reference expansion, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, session-search behavior, and the memory tool wrapper
 - `tests/tools/test_web_tools.py` covers Tavily schema gating, normalization, truncation, and validation errors
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls

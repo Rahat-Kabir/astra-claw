@@ -44,6 +44,7 @@ It is not designed as:
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
+- Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, and loads one for a turn with `/skill <name> <request>`
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles (daemon-thread, silent-fail)
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
@@ -141,7 +142,7 @@ astra> hey
 Hello! How can I help you?
 ```
 
-Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/exit`, `/quit`.
+Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/skills`, `/skill`, `/exit`, `/quit`.
 
 Attach local context inline:
 
@@ -154,6 +155,15 @@ astra> recall @session:2026-04-21_abcd1234
 ```
 
 Context refs are expanded before the model call, capped for size, and blocked for sensitive paths.
+
+Use a skill for one turn:
+
+```text
+astra> /skills
+astra> /skill code-review review @diff
+```
+
+Skills are markdown files under `~/.astraclaw/skills/<name>/SKILL.md`. Optional frontmatter can provide `name` and `description`; otherwise Astra-Claw uses the folder name and first plain body line. A compact skill index is added to the system prompt, while full skill content is loaded only when invoked.
 
 Resume a session:
 
@@ -205,6 +215,7 @@ astra-claw/
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
+|   |   |-- skills.py         # markdown skill discovery + invocation message builder
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
 |   |   `-- ui.py             # Rich output helpers + heartbeat spinner + tool line
 |   |-- agent/
@@ -229,7 +240,7 @@ astra-claw/
 |       `-- clarify_tool.py   # ask one clarifying question via the CLI callback
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
-|   |-- cli/                 # slash command and REPL tests
+|   |-- cli/                 # slash command, skill, and REPL tests
 |   |-- tools/               # tool-level tests
 |   |-- test_features.py     # core regression tests
 |   |-- test_soul.py         # SOUL.md seeding and loading tests

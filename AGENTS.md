@@ -57,6 +57,7 @@ astra-claw/
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion before agent turns
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
+|   |   |-- skills.py         # lightweight SKILL.md discovery + one-turn invocation helpers
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
 |   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + tool line
 |   |-- agent/
@@ -136,6 +137,7 @@ __main__.py        (imports loop + cli + session)
 - Compaction summary calls must pass `on_thinking=None` so the user's spinner only tracks user-facing turns.
 - CLI tool-call feedback logic belongs in `cli/tool_display.py` (pure) and `cli/ui.py` (Rich); do not print tool previews or summaries from inside the agent loop.
 - Context reference expansion belongs in `cli/context_refs.py` and runs before user text reaches `run_conversation()`. Supported refs are `@file:`, `@folder:`, `@diff`, and `@session:`; keep expansion bounded and block sensitive paths.
+- Lightweight skills live under `~/.astraclaw/skills/**/SKILL.md`. `cli/skills.py` discovers metadata, `/skills` lists installed skills, `/skill <name> <request>` injects full skill content for one turn, and `prompt_builder.py` only adds the compact skill index.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.

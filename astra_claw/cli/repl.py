@@ -22,8 +22,9 @@ from ..session import (
     rewrite_session,
     save_message,
 )
-from .context_refs import expand_context_references
 from .commands import resolve_command, AstraCompleter
+from .context_refs import expand_context_references
+from .skills import build_skill_invocation_message, list_skills
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
 
@@ -169,10 +170,29 @@ def _run_loop(
                     dropped_messages=outcome.dropped_messages,
                     passes=outcome.passes,
                 )
+            elif command.name == "/skills":
+                cli_ui.print_skills(list_skills())
+            elif command.name == "/skill":
+                try:
+                    _, rest = message.split(maxsplit=1)
+                    skill_name, user_request = rest.split(maxsplit=1)
+                except ValueError:
+                    cli_ui.print_warning("Usage: /skill <name> <request>")
+                    continue
+
+                try:
+                    message = build_skill_invocation_message(skill_name, user_request)
+                except ValueError as exc:
+                    cli_ui.print_warning(str(exc))
+                    continue
             elif command.name == "/exit":
                 cli_ui.print_success("Bye.")
                 break
-            continue
+            else:
+                continue
+
+            if command.name != "/skill":
+                continue
 
         events = _build_agent_events(cli_ui)
         clarify_callback = _build_clarify_callback(cli_ui, prompt)
