@@ -320,10 +320,19 @@ Why: let the model load full skill instructions on demand instead of relying onl
 - [x] `tests/tools/test_skills_tool.py` plus CRLF coverage in `tests/cli/test_skills.py`
 - [x] Verified full suite: `uv run --with pytest pytest -q` -> 351 passed
 
+## v0.2.12 - Context-Ref Fuzzy Picker (2026-05-28)
+
+Why: make `@file:` and `@folder:` easier to use without knowing full paths.
+
+### Completed
+
+- [x] `astra_claw/cli/context_completion.py` - fuzzy workspace search for `@file:` / `@folder:` partials, scoped search under typed directories, session title matching for `@session:`, path size/folder-count preview meta, and a 25-result cap
+- [x] `tests/cli/test_context_completion.py` - nested fuzzy match, session title match, and cap coverage
+- [x] Verified full suite: `uv run --with pytest pytest -q` -> 355 passed
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
-- [ ] Context-ref preview + fuzzy picker: show file/folder/diff/session summaries while typing `@`, and make partial matches easier to select.
 - [ ] Skills polish: `/{skill-name}` slash alias, optional install flow, or richer frontmatter.
 
 ## Planned

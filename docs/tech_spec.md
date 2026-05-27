@@ -156,6 +156,7 @@ Final Response
 - `@folder:` emits a bounded tree listing only; it does not read every file in the folder
 - `@diff` runs `git diff --no-ext-diff -- .` from the workspace fence and attaches the unstaged diff
 - `@session:` loads a past JSONL transcript via `session.load_session()` and rejects attaching the current session to itself
+- `cli/context_completion.py` powers REPL tab completion for context refs: `@` suggests ref types; `@file:` / `@folder:` use directory listing when browsing (`path/` or empty partial) and fuzzy workspace search when a name fragment is typed (substring + token match, ranked, capped at 25); `@session:` matches session id or title; completion rows include lightweight file-size / folder-count meta
 
 ### Live Feedback Surface
 

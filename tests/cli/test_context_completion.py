@@ -90,6 +90,64 @@ def test_nested_file_completion(tmp_path, monkeypatch):
     assert "@file:src/main.py" in texts
 
 
+def test_fuzzy_file_completion_finds_nested_matches(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    nested = tmp_path / "astra_claw" / "cli"
+    nested.mkdir(parents=True)
+    (nested / "repl.py").write_text("print('hi')", encoding="utf-8")
+
+    texts = _completion_texts(ContextReferenceCompleter(), "@file:repl")
+
+    assert "@file:astra_claw/cli/repl.py" in texts
+
+
+def test_fuzzy_folder_completion_finds_nested_matches(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    nested = tmp_path / "docs" / "guides"
+    nested.mkdir(parents=True)
+
+    texts = _completion_texts(ContextReferenceCompleter(), "@folder:guide")
+
+    assert "@folder:docs/guides/" in texts
+
+
+def test_session_completion_matches_title(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    sessions_dir = tmp_path / "sessions"
+    sessions_dir.mkdir()
+    (sessions_dir / "2026-05-13_abcd1234.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "meta",
+                "id": "2026-05-13_abcd1234",
+                "created": "2026-05-13T00:00:00",
+                "title": "Context Refs",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+        texts = _completion_texts(ContextReferenceCompleter(), "@session:context")
+
+    assert "@session:2026-05-13_abcd1234" in texts
+
+
+def test_fuzzy_results_are_capped(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    for index in range(30):
+        (tmp_path / f"file_{index:02d}_match.txt").write_text("x", encoding="utf-8")
+
+    texts = _completion_texts(ContextReferenceCompleter(), "@file:match")
+
+    assert len(texts) <= 25
+
+
 def test_session_completion_suggests_recent_sessions(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     constants.set_workspace_fence(tmp_path)

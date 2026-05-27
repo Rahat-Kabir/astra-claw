@@ -39,7 +39,7 @@ It is not designed as:
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
-- Expands inline context references (`@file:`, `@folder:`, `@diff`, `@session:`) before agent turns
+- Expands inline context references (`@file:`, `@folder:`, `@diff`, `@session:`) before agent turns, with fuzzy tab completion for file/folder/session picks in the REPL
 - Searches the web via `web_search` and extracts pages via `web_extract` (Tavily-backed, hidden unless `TAVILY_API_KEY` is set)
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
@@ -148,13 +148,14 @@ Attach local context inline:
 
 ```text
 astra> summarize @file:README.md
+astra> review @file:repl
 astra> review @file:astra_claw/cli/repl.py:100-190
 astra> what changed? @diff
-astra> show me the CLI tree @folder:astra_claw/cli
-astra> recall @session:2026-04-21_abcd1234
+astra> show me the CLI tree @folder:cli
+astra> recall @session:context
 ```
 
-Context refs are expanded before the model call, capped for size, and blocked for sensitive paths.
+Type `@` and Tab to pick a ref type. Partial paths fuzzy-match across the workspace (for example `@file:repl` can complete to a nested file). Context refs are expanded before the model call, capped for size, and blocked for sensitive paths.
 
 Use a skill for one turn:
 
@@ -213,6 +214,7 @@ astra-claw/
 |   |-- cli/
 |   |   |-- commands.py       # slash command registry + autocomplete
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion
+|   |   |-- context_completion.py # fuzzy tab completion for context refs
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- skills.py         # markdown skill discovery + invocation message builder
