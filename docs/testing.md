@@ -22,6 +22,7 @@ python -m pytest tests/cli tests/agent -v
 python -m pytest tests/cli -v
 python -m pytest tests/cli/test_context_refs.py tests/cli/test_repl.py -v
 python -m pytest tests/cli/test_skills.py tests/cli/test_repl.py -v
+python -m pytest tests/tools/test_skills_tool.py -v
 python -m pytest tests/test_session.py -v
 python -m pytest tests/tools/test_file_tools.py -v
 python -m pytest tests/tools/test_patch_tool.py -v
@@ -47,7 +48,7 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 - `tests/agent/test_context_compactor.py`: compaction budget, protected window, and summary reuse tests
 - `tests/cli/`: slash command, completion, skill discovery/invocation, context-reference expansion, REPL routing, and tool-display preview/summary tests
 - `tests/test_session.py`: JSONL session persistence and JSONL session-search tests
-- `tests/tools/`: tool-level tests for file, patch, shell, search, web, memory, and session-search behavior
+- `tests/tools/`: tool-level tests for file, patch, shell, search, web, memory, skills, and session-search behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls
 
 ## Notes

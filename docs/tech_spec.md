@@ -71,6 +71,7 @@ Final Response
   - `terminal`: `shell`
   - `web`: `web_search`, `web_extract`
   - `memory`: `memory`
+  - `skills`: `skills`
 - `agent/loop.py` reads optional `tools.enabled_toolsets` from config and passes that filter into the registry
 - If no toolset filter is configured, all registered and available tools are exposed
 
@@ -137,11 +138,13 @@ Final Response
 ### Lightweight Skills
 
 - Skills are user-owned markdown files at `~/.astraclaw/skills/**/SKILL.md`
-- `cli/skills.py` scans recursively, skips noisy dependency/cache folders, caps each skill file at 64 KB, and parses simple optional frontmatter keys (`name`, `description`)
+- `cli/skills.py` scans recursively, skips noisy dependency/cache folders, caps each skill file at 64 KB, parses simple optional frontmatter keys (`name`, `description`), and normalizes CRLF line endings before frontmatter parsing
 - `list_skills()` returns unique slugified skill metadata; `build_skills_index()` renders a compact `<available_skills>` prompt block
 - `prompt_builder.py` appends only the compact skill index to the system prompt, keeping full skill bodies out of the prompt unless invoked
 - `/skills` lists installed skills in the CLI; `/skill <name> <request>` wraps the full `SKILL.md` body and user request into one turn, then still passes through context-reference expansion
-- v0.2.10 is explicit invocation only: no automatic skill selection, no skill install/update hub, and no persistent active-skill session state
+- `tools/skills_tool.py` exposes agent-driven progressive disclosure: `skills(action="list")` returns metadata only; `skills(action="view", name=...)` returns raw `SKILL.md` content as JSON
+- The `skills` tool is hidden unless at least one skill is installed (`check_fn` over `list_skills()`); no special-casing in `tool_runner.py`
+- v0.2.x is explicit load-on-demand only: no skill install/update hub and no persistent active-skill session state
 
 ### Context References
 

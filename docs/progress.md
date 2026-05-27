@@ -307,11 +307,24 @@ Why: let users store reusable task workflows as markdown and invoke them from th
 - [x] `tests/cli/test_skills.py` plus command, REPL, and prompt-builder coverage
 - [x] Verified focused suite: `uv run --with pytest pytest tests/cli/test_commands.py tests/cli/test_skills.py tests/cli/test_repl.py tests/test_features.py` -> 58 passed
 
+## v0.2.11 - Skills Agent Tool (2026-05-27)
+
+Why: let the model load full skill instructions on demand instead of relying only on the compact index or user slash commands.
+
+### Completed
+
+- [x] `astra_claw/tools/skills_tool.py` - `skills` tool with `list` and `view` actions; `view` returns raw `SKILL.md`; hidden via `check_fn` when no skills are installed
+- [x] `astra_claw/agent/loop.py` - imports the tool module so it registers at agent startup
+- [x] `astra_claw/cli/tool_display.py` - preview/summary lines for `skills` tool calls
+- [x] `astra_claw/cli/skills.py` - normalize CRLF line endings in frontmatter parsing so Windows `SKILL.md` files parse correctly
+- [x] `tests/tools/test_skills_tool.py` plus CRLF coverage in `tests/cli/test_skills.py`
+- [x] Verified full suite: `uv run --with pytest pytest -q` -> 351 passed
+
 ## Next
 
 - [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
 - [ ] Context-ref preview + fuzzy picker: show file/folder/diff/session summaries while typing `@`, and make partial matches easier to select.
-- [ ] Skills v2: optional install/update flow, richer frontmatter, or automatic skill suggestion.
+- [ ] Skills polish: `/{skill-name}` slash alias, optional install flow, or richer frontmatter.
 
 ## Planned
 

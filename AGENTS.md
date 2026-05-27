@@ -79,11 +79,12 @@ astra-claw/
 |       |-- session_search_tool.py # session_search - recent sessions + JSONL reranked recall
 |       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |       |-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
+|       |-- skills_tool.py    # skills tool - list/view installed SKILL.md files
 |       `-- clarify_tool.py   # clarify tool - thin shell, delegates to platform callback
 |-- tests/
 |   |-- agent/               # mocked agent loop tests (includes compaction coverage)
 |   |-- cli/                 # CLI command/completion/REPL tests
-|   |-- tools/               # tool-level tests (includes test_memory_tool.py)
+|   |-- tools/               # tool-level tests (includes test_memory_tool.py, test_skills_tool.py)
 |   |-- test_features.py     # core regression tests
 |   |-- test_session.py      # session persistence tests
 |   |-- test_soul.py         # SOUL.md seeding / loading / fallback tests
@@ -137,7 +138,7 @@ __main__.py        (imports loop + cli + session)
 - Compaction summary calls must pass `on_thinking=None` so the user's spinner only tracks user-facing turns.
 - CLI tool-call feedback logic belongs in `cli/tool_display.py` (pure) and `cli/ui.py` (Rich); do not print tool previews or summaries from inside the agent loop.
 - Context reference expansion belongs in `cli/context_refs.py` and runs before user text reaches `run_conversation()`. Supported refs are `@file:`, `@folder:`, `@diff`, and `@session:`; keep expansion bounded and block sensitive paths.
-- Lightweight skills live under `~/.astraclaw/skills/**/SKILL.md`. `cli/skills.py` discovers metadata, `/skills` lists installed skills, `/skill <name> <request>` injects full skill content for one turn, and `prompt_builder.py` only adds the compact skill index.
+- Lightweight skills live under `~/.astraclaw/skills/**/SKILL.md`. `cli/skills.py` discovers metadata, `/skills` lists installed skills, `/skill <name> <request>` injects full skill content for one turn, `tools/skills_tool.py` exposes agent-driven `list`/`view`, and `prompt_builder.py` only adds the compact skill index.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.

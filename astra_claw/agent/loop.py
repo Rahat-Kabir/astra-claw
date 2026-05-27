@@ -28,6 +28,7 @@ from ..tools import file_tools  # noqa: F401
 from ..tools import memory_tool as memory_tool_module  # noqa: F401
 from ..tools import patch_tool  # noqa: F401
 from ..tools import search_tool  # noqa: F401
+from ..tools import skills_tool as skills_tool_module  # noqa: F401
 from ..tools import session_search_tool as session_search_tool_module  # noqa: F401
 from ..tools import shell_tool  # noqa: F401
 from ..tools import todo_tool as todo_tool_module  # noqa: F401

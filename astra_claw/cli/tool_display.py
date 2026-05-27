@@ -52,6 +52,14 @@ def build_tool_preview(name: str, args: Dict[str, Any]) -> str:
     if name == "session_search":
         query = args.get("query")
         return _oneline(query) if query else "recent sessions"
+
+    if name == "skills":
+        action = args.get("action", "")
+        skill_name = args.get("name", "")
+        if action == "view" and skill_name:
+            return skill_name
+        return action or None
+
     if name == "web_extract":
         urls = args.get("urls")
         if isinstance(urls, list) and urls:
@@ -148,6 +156,19 @@ def summarize_tool_result(name: str, result: str) -> Optional[str]:
         total = data.get("count")
         if isinstance(total, int):
             return f"{total} session{'s' if total != 1 else ''}"
+        return None
+
+    if name == "skills":
+        try:
+            parsed = json.loads(result)
+        except json.JSONDecodeError:
+            return None
+        if not parsed.get("success"):
+            return parsed.get("error")
+        if parsed.get("action") == "list":
+            return f"{parsed.get('count', 0)} skills"
+        if parsed.get("action") == "view":
+            return parsed.get("name")
         return None
 
     if name in ("web_search", "web_extract"):

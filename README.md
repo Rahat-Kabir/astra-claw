@@ -44,7 +44,7 @@ It is not designed as:
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
-- Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, and loads one for a turn with `/skill <name> <request>`
+- Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles (daemon-thread, silent-fail)
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
@@ -237,6 +237,7 @@ astra-claw/
 |       |-- session_search_tool.py # cross-session recall over JSONL session history
 |       |-- memory_tool.py    # memory tool (add/replace/remove)
 |       |-- todo_tool.py      # session todo list (plan + track tasks)
+|       |-- skills_tool.py    # list/view installed SKILL.md files
 |       `-- clarify_tool.py   # ask one clarifying question via the CLI callback
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
@@ -307,6 +308,8 @@ session:
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.
 
 `web_search` and `web_extract` are exposed only when `TAVILY_API_KEY` is set.
+
+The `skills` tool is exposed only when at least one skill is installed under `~/.astraclaw/skills/`.
 
 Fallback retries only apply to transient/runtime failures such as timeouts, connection errors, rate limits, and 5xx responses. Auth and bad-request errors do not fail over.
 
