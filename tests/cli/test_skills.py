@@ -44,6 +44,24 @@ Start with findings.
     )
 
 
+def test_parse_skill_file_handles_crlf_frontmatter(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    skill_dir = tmp_path / "skills" / "code-review"
+    skill_dir.mkdir(parents=True)
+    path = skill_dir / "SKILL.md"
+    path.write_bytes(
+        b"---\r\n"
+        b"name: code-review\r\n"
+        b"description: Review code changes.\r\n"
+        b"---\r\n"
+    )
+
+    info = parse_skill_file(path)
+
+    assert info.name == "code-review"
+    assert info.description == "Review code changes."
+
+
 def test_parse_skill_file_falls_back_to_folder_and_body(tmp_path, monkeypatch):
     monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
     path = _write_skill(

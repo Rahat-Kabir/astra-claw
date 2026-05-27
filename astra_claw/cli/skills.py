@@ -59,6 +59,8 @@ def _iter_skill_files() -> list[Path]:
 
 
 def _parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
+    # SKILL.md may use CRLF on Windows; normalize before delimiter checks.
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
     if not content.startswith("---\n"):
         return {}, content
 
