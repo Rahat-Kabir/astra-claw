@@ -1,11 +1,14 @@
-"""Auto-generate short session titles from the first user/assistant exchange.
+"""Auto-generate short session titles from the first substantive exchange.
 
-Runs on a daemon thread after the first response is delivered so it never
-adds latency to the user-facing reply. Failures are silent - titles are
-a nice-to-have.
+Runs on a daemon thread after a user-facing turn so it never adds latency to
+the reply. Greeting-only openers are skipped until a substantive user message
+lands. Failures are silent - titles are a nice-to-have.
 """
 
+from __future__ import annotations
+
 import logging
+import re
 import threading
 from typing import Optional
 
@@ -20,6 +23,65 @@ _TITLE_PROMPT = (
     "the main topic or intent. Return ONLY the title text, nothing else. "
     "No quotes, no trailing punctuation, no prefixes like 'Title:'."
 )
+
+_GREETING_PHRASES = frozenset(
+    {
+        "hey",
+        "hi",
+        "hello",
+        "yo",
+        "sup",
+        "hiya",
+        "howdy",
+        "thanks",
+        "thank you",
+        "thx",
+        "ty",
+        "ok",
+        "okay",
+        "k",
+        "bye",
+        "goodbye",
+        "cya",
+        "yes",
+        "no",
+        "yep",
+        "nope",
+        "yeah",
+        "nah",
+        "how are you",
+        "whats up",
+        "what's up",
+        "good morning",
+        "good evening",
+        "good night",
+    }
+)
+
+_GREETING_STARTERS = frozenset({"hey", "hi", "hello", "yo", "sup", "thanks", "thank"})
+
+
+def is_low_signal_user_message(message: str) -> bool:
+    """Return True for greetings and other messages too weak to title from."""
+    text = (message or "").strip()
+    if not text:
+        return True
+
+    normalized = re.sub(r"[^\w\s']", " ", text.lower())
+    normalized = " ".join(normalized.split())
+    if not normalized:
+        return True
+    if len(normalized) <= 3:
+        return True
+    if normalized in _GREETING_PHRASES:
+        return True
+
+    words = normalized.split()
+    if len(words) <= 3 and words[0] in _GREETING_STARTERS:
+        return True
+    if len(words) == 2 and words[0] == "thank" and words[1] == "you":
+        return True
+    return False
 
 
 def generate_title(
@@ -113,15 +175,23 @@ def maybe_auto_title(
     enabled: bool = True,
     api_key: Optional[str] = None,
 ) -> Optional[threading.Thread]:
-    """Fire-and-forget title generation after the first exchange.
+    """Fire-and-forget title generation after the first substantive exchange.
 
     Returns the spawned thread (mainly for tests); None if we skipped.
     """
+    del user_msg_count  # kept for REPL call-site compatibility
+
     if not enabled:
         return None
     if not session_id or not user_message or not assistant_response:
         return None
-    if user_msg_count > 2:
+    if is_low_signal_user_message(user_message):
+        return None
+
+    try:
+        if get_session_title(session_id):
+            return None
+    except Exception:
         return None
 
     thread = threading.Thread(

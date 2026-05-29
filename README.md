@@ -45,7 +45,7 @@ It is not designed as:
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
 - Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
-- Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles (daemon-thread, silent-fail)
+- Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles after the first substantive exchange (skips greeting-only openers; daemon-thread, silent-fail)
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
 - Retries once on a fallback provider/model for transient LLM failures
@@ -225,7 +225,7 @@ astra-claw/
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
 |   |   |-- streaming.py      # stream iteration + on_thinking + context-overflow detection
 |   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
-|   |   |-- title_generator.py # auto-generates session titles on a daemon thread
+|   |   |-- title_generator.py # auto-generates session titles after first substantive turn
 |   |   |-- loop.py           # AstraAgent - core conversation loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
@@ -304,7 +304,7 @@ memory:
   memory_char_limit: 2200
   user_char_limit: 1375
 session:
-  auto_title: true   # generate a short title after the first exchange
+  auto_title: true   # title after the first substantive exchange (greetings skipped)
 ```
 
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.

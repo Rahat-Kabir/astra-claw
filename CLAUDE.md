@@ -66,7 +66,7 @@ astra-claw/
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
 |   |   |-- streaming.py      # one-stream iteration + on_thinking + context-overflow detection
 |   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
-|   |   |-- title_generator.py # daemon-thread auto-title from first exchange
+|   |   |-- title_generator.py # daemon-thread auto-title after first substantive exchange
 |   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
 |   `-- tools/
@@ -153,7 +153,7 @@ __main__.py        (imports loop + cli + session)
 - `SOUL.md` content is scanned for prompt-injection / invisible-unicode payloads and truncated before loading; missing, empty, or unreadable files fall back to `DEFAULT_IDENTITY`.
 - LLM provider fallback is single-step only: retry once on the configured fallback provider/model for transient errors (timeouts, connection errors, 429, 5xx). Do not fail over on auth or bad-request errors.
 - Workspace fence: `--workspace <path>` in `__main__.py` chdirs + sets `_workspace_fence` via `set_workspace_fence()`. `write_file` and `patch` reject any resolved path outside `get_workspace_fence()`. Fence is unset by default (falls back to cwd). Shell + read_file are intentionally NOT fenced.
-- Session titles: `agent/title_generator.py` daemon-thread auto-titles from first exchange; REPL joins pending threads on exit (5s). Silent-fail. Disable via `session.auto_title: false`.
+- Session titles: `agent/title_generator.py` daemon-thread auto-titles after the first substantive exchange (greetings/small talk skipped); REPL joins pending threads on exit (5s). Silent-fail. One title per session, no re-title. Disable via `session.auto_title: false`.
 - `llm.complete_once()` is the cheap non-streaming helper; prefers `max_completion_tokens`, falls back to `max_tokens`.
 - Setup wizard: `astraclaw setup [provider|key|model]` runs the three-step wizard in `cli/setup.py`. It writes overrides via `config.save_user_config()` (only changed keys; defaults stay implicit). The API key lives at `model.api_key` in `~/.astraclaw/config.yaml`; `llm.resolve_api_key()` prefers it, falling back to the provider env var.
 - First-run guard: in chat mode, `__main__.py` checks `_has_usable_credentials()` and offers to launch the wizard when no key is reachable. One-shot and `--sessions` modes skip the prompt.

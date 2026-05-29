@@ -209,8 +209,9 @@ Final Response
 
 ### Session Title Auto-generation
 
-- `astra_claw/agent/title_generator.py` generates a 3-5 word title from the first user/assistant exchange using a cheap, non-streaming LLM call (`llm.complete_once`)
-- Runs on a **daemon thread** after each user-facing turn when `user_msg_count <= 2`, so it never blocks the reply
+- `astra_claw/agent/title_generator.py` generates a 3-5 word title from the first **substantive** user/assistant exchange using a cheap, non-streaming LLM call (`llm.complete_once`)
+- Greeting-only openers (`hey`, `hello`, `thanks`, short small talk) are skipped via `is_low_signal_user_message()`; titling can land on a later turn until a real topic appears
+- Runs on a **daemon thread** after each eligible user-facing turn while the session is still untitled, so it never blocks the reply
 - Silent-fail by design: any exception (bad request, 401, timeout) returns `None` and the session simply stays untitled
 - Title resolves a model via: `compression.summary_model` -> `model.fallback_model` -> `model.default`; same provider as the primary route
 - Output cleanup: strips matching quotes, strips a leading `Title:` prefix, strips trailing `.!?,;:`, truncates to 80 chars with `...`
@@ -336,7 +337,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
 - `tests/agent/test_events.py` covers `AgentEvents` wiring: thinking toggles, tool start/complete ordering, `events=None` back-compat, and compaction silence
 - `tests/cli/test_tool_display.py` covers preview + summary helpers for all 7 tools plus error paths
-- `tests/agent/test_title_generator.py` covers title cleanup (quotes, prefix, truncation), silent-fail on exception, skip when already titled, daemon-thread wiring, and the `user_msg_count <= 2` gate
+- `tests/agent/test_title_generator.py` covers title cleanup (quotes, prefix, truncation), silent-fail on exception, skip when already titled, greeting/small-talk skip, later substantive turn titling, daemon-thread wiring
 - `tests/cli/test_setup.py` covers the full wizard, section flags, key validation, keep-existing-key, custom-model path, and provider-change key invalidation
 - `tests/test_config.py` covers `save_user_config()` partial overrides, merge-into-existing, and `load_user_config()` empty-file behavior
 - `tests/test_llm.py` covers `resolve_api_key()` precedence, `create_client()` explicit-key passthrough, and `validate_credentials()` success / unauthorized / timeout / empty-key paths

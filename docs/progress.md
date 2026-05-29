@@ -330,9 +330,18 @@ Why: make `@file:` and `@folder:` easier to use without knowing full paths.
 - [x] `tests/cli/test_context_completion.py` - nested fuzzy match, session title match, and cap coverage
 - [x] Verified full suite: `uv run --with pytest pytest -q` -> 355 passed
 
+## v0.2.13 - Smarter Session Titling (2026-05-28)
+
+Why: greeting-only first turns were producing useless `/sessions` titles like "Casual Hello".
+
+### Completed
+
+- [x] `astra_claw/agent/title_generator.py` - `is_low_signal_user_message()` skips greetings/small talk; titles fire on the first substantive exchange instead of only the first two turns; still one title per session, no re-title
+- [x] `tests/agent/test_title_generator.py` - greeting skip, later substantive turn, and existing-title guard coverage
+- [x] Verified full suite: `uv run --with pytest pytest -q` -> 359 passed
+
 ## Next
 
-- [ ] Smarter titling: skip greetings-only first turns; optionally re-title at N=4 exchanges with more context.
 - [ ] Skills polish: `/{skill-name}` slash alias, optional install flow, or richer frontmatter.
 
 ## Planned

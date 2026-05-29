@@ -1,13 +1,24 @@
 """Tests for astra_claw.agent.title_generator."""
 
-import time
 from unittest.mock import patch
 
 from astra_claw.agent.title_generator import (
     auto_title_session,
     generate_title,
+    is_low_signal_user_message,
     maybe_auto_title,
 )
+
+
+class TestIsLowSignalUserMessage:
+    def test_detects_common_greetings(self):
+        assert is_low_signal_user_message("hey")
+        assert is_low_signal_user_message("Hello!")
+        assert is_low_signal_user_message("thanks")
+
+    def test_allows_substantive_messages(self):
+        assert not is_low_signal_user_message("help me add a skills tool")
+        assert not is_low_signal_user_message("review @file:repl.py")
 
 
 class TestGenerateTitle:
@@ -173,14 +184,14 @@ class TestAutoTitleSession:
 
 
 class TestMaybeAutoTitle:
-    def test_fires_thread_on_first_exchange(self):
+    def test_fires_thread_on_first_substantive_exchange(self):
         with patch(
             "astra_claw.agent.title_generator.auto_title_session"
         ) as worker:
             thread = maybe_auto_title(
                 "sess-1",
-                "hello",
-                "hi there",
+                "help me add a skills tool",
+                "Sure, let's start with the schema.",
                 user_msg_count=1,
                 provider="openai",
                 model="gpt-x",
@@ -189,29 +200,67 @@ class TestMaybeAutoTitle:
             thread.join(timeout=2.0)
             worker.assert_called_once_with(
                 "sess-1",
-                "hello",
-                "hi there",
+                "help me add a skills tool",
+                "Sure, let's start with the schema.",
                 provider="openai",
                 model="gpt-x",
                 api_key=None,
             )
 
-    def test_skips_when_user_count_exceeds_two(self):
+    def test_skips_greeting_only_exchange(self):
         with patch(
             "astra_claw.agent.title_generator.auto_title_session"
         ) as worker:
             assert (
                 maybe_auto_title(
                     "sess-1",
-                    "later",
-                    "still later",
-                    user_msg_count=5,
+                    "hello",
+                    "Hi there",
+                    user_msg_count=1,
                     provider="openai",
                     model="gpt-x",
                 )
                 is None
             )
-            time.sleep(0.05)
+            worker.assert_not_called()
+
+    def test_fires_on_later_substantive_turn(self):
+        with patch(
+            "astra_claw.agent.title_generator.get_session_title",
+            return_value=None,
+        ), patch(
+            "astra_claw.agent.title_generator.auto_title_session"
+        ) as worker:
+            thread = maybe_auto_title(
+                "sess-1",
+                "help me add a skills tool",
+                "Sure, let's start with the schema.",
+                user_msg_count=5,
+                provider="openai",
+                model="gpt-x",
+            )
+            assert thread is not None
+            thread.join(timeout=2.0)
+            worker.assert_called_once()
+
+    def test_skips_when_title_already_set(self):
+        with patch(
+            "astra_claw.agent.title_generator.get_session_title",
+            return_value="Existing Title",
+        ), patch(
+            "astra_claw.agent.title_generator.auto_title_session"
+        ) as worker:
+            assert (
+                maybe_auto_title(
+                    "sess-1",
+                    "help me add a skills tool",
+                    "Sure.",
+                    user_msg_count=1,
+                    provider="openai",
+                    model="gpt-x",
+                )
+                is None
+            )
             worker.assert_not_called()
 
     def test_skips_on_empty_response(self):
