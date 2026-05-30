@@ -24,7 +24,7 @@ from ..session import (
 )
 from .commands import resolve_command, AstraCompleter
 from .context_refs import expand_context_references
-from .skills import build_skill_invocation_message, list_skills
+from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
 
@@ -193,6 +193,16 @@ def _run_loop(
 
             if command.name != "/skill":
                 continue
+        else:
+            resolved = resolve_skill_command(message)
+            if resolved is not None:
+                skill, user_request = resolved
+                try:
+                    message = build_skill_invocation_message(skill.name, user_request)
+                    cli_ui.print_success(f"Loading skill: {skill.name}")
+                except ValueError as exc:
+                    cli_ui.print_warning(str(exc))
+                    continue
 
         events = _build_agent_events(cli_ui)
         clarify_callback = _build_clarify_callback(cli_ui, prompt)

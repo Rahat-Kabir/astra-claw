@@ -1,7 +1,7 @@
 """Slash commands and prompt completion for the interactive CLI."""
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Mapping, Optional
 
 from prompt_toolkit.completion import Completer, Completion
 
@@ -50,6 +50,20 @@ def resolve_command(text: str) -> Optional[CommandDef]:
 class SlashCommandCompleter(Completer):
     """Complete slash commands at the start of the prompt."""
 
+    def __init__(
+        self,
+        skill_commands_provider: Callable[[], Mapping[str, object]] | None = None,
+    ) -> None:
+        self._skill_commands_provider = skill_commands_provider
+
+    def _iter_skill_commands(self) -> Mapping[str, object]:
+        if self._skill_commands_provider is None:
+            return {}
+        try:
+            return self._skill_commands_provider() or {}
+        except Exception:
+            return {}
+
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
         if not text.startswith("/") or any(ch.isspace() for ch in text):
@@ -66,12 +80,25 @@ class SlashCommandCompleter(Completer):
                     display_meta=description,
                 )
 
+        for cmd, skill in sorted(self._iter_skill_commands().items()):
+            if not cmd.startswith(text.lower()):
+                continue
+            description = str(getattr(skill, "description", "") or "Skill command")
+            yield Completion(
+                cmd,
+                start_position=-len(text),
+                display=cmd,
+                display_meta=description,
+            )
+
 
 class AstraCompleter(Completer):
     """Complete slash commands and inline context references."""
 
     def __init__(self) -> None:
-        self._slash = SlashCommandCompleter()
+        from .skills import get_skill_commands
+
+        self._slash = SlashCommandCompleter(skill_commands_provider=get_skill_commands)
         self._context_refs = ContextReferenceCompleter()
 
     def get_completions(self, document, complete_event):

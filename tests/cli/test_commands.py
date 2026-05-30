@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from prompt_toolkit.document import Document
 
 from astra_claw.cli.commands import COMMANDS, SlashCommandCompleter, resolve_command
+from astra_claw.cli.skills import SkillInfo
 
 
 def _completion_texts(text: str) -> list[str]:
@@ -36,6 +39,23 @@ def test_slash_completer_suggests_matching_commands():
 def test_slash_completer_suggests_skill_commands():
     assert "/skill" in _completion_texts("/ski")
     assert "/skills" in _completion_texts("/ski")
+
+
+def test_slash_completer_suggests_installed_skill_aliases():
+    skill = SkillInfo(
+        name="code-review",
+        description="Review code changes.",
+        path=Path("SKILL.md"),
+        command="/code-review",
+    )
+    completer = SlashCommandCompleter(skill_commands_provider=lambda: {"/code-review": skill})
+
+    texts = [
+        completion.text
+        for completion in completer.get_completions(Document("/code"), None)
+    ]
+
+    assert "/code-review" in texts
 
 
 def test_slash_completer_includes_aliases():

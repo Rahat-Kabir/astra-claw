@@ -130,7 +130,7 @@ Final Response
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
 - Rich is used for light output: startup banner, help, session table, warnings, errors, and the live feedback spinner
-- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; `/skill` rewrites the prompt before the LLM call, and the others are not sent to the LLM
+- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; skill aliases (`/<skill-name>`) and `/skill` rewrite the prompt before the LLM call, and the others are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior
 - `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
@@ -141,7 +141,9 @@ Final Response
 - `cli/skills.py` scans recursively, skips noisy dependency/cache folders, caps each skill file at 64 KB, parses simple optional frontmatter keys (`name`, `description`), and normalizes CRLF line endings before frontmatter parsing
 - `list_skills()` returns unique slugified skill metadata; `build_skills_index()` renders a compact `<available_skills>` prompt block
 - `prompt_builder.py` appends only the compact skill index to the system prompt, keeping full skill bodies out of the prompt unless invoked
-- `/skills` lists installed skills in the CLI; `/skill <name> <request>` wraps the full `SKILL.md` body and user request into one turn, then still passes through context-reference expansion
+- `/skills` lists installed skills in the CLI; `/<skill-name> [request]` and `/skill <name> <request>` wrap the full `SKILL.md` body (plus optional user request) into one turn, then still pass through context-reference expansion
+- `get_skill_commands()` and `resolve_skill_command()` register one slash alias per installed skill; built-in slash commands win on name collisions; underscore/hyphen aliases are interchangeable
+- Slash-command tab completion merges static commands with installed skill aliases
 - `tools/skills_tool.py` exposes agent-driven progressive disclosure: `skills(action="list")` returns metadata only; `skills(action="view", name=...)` returns raw `SKILL.md` content as JSON
 - The `skills` tool is hidden unless at least one skill is installed (`check_fn` over `list_skills()`); no special-casing in `tool_runner.py`
 - v0.2.x is explicit load-on-demand only: no skill install/update hub and no persistent active-skill session state

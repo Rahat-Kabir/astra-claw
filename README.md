@@ -44,7 +44,7 @@ It is not designed as:
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
-- Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
+- Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>` or `/<skill-name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles after the first substantive exchange (skips greeting-only openers; daemon-thread, silent-fail)
 - Streams responses as tokens arrive
 - Supports OpenAI and OpenRouter
@@ -161,8 +161,11 @@ Use a skill for one turn:
 
 ```text
 astra> /skills
+astra> /code-review review @diff
 astra> /skill code-review review @diff
 ```
+
+Each installed skill also gets a `/<name>` slash alias (tab-completable). Built-in commands take precedence over skill names.
 
 Skills are markdown files under `~/.astraclaw/skills/<name>/SKILL.md`. Optional frontmatter can provide `name` and `description`; otherwise Astra-Claw uses the folder name and first plain body line. A compact skill index is added to the system prompt, while full skill content is loaded only when invoked.
 

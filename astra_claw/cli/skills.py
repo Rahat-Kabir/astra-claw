@@ -115,7 +115,7 @@ def parse_skill_file(path: Path) -> SkillInfo:
         name=slug,
         description=description,
         path=path,
-        command=f"/skill {slug}",
+        command=f"/{slug}",
     )
 
 
@@ -136,6 +136,41 @@ def list_skills() -> list[SkillInfo]:
         seen.add(info.name)
 
     return skills
+
+
+def _reserved_slash_commands() -> set[str]:
+    from .commands import iter_command_names
+
+    return {name.lower() for name in iter_command_names(include_aliases=True)}
+
+
+def get_skill_commands() -> dict[str, SkillInfo]:
+    """Map ``/skill-slug`` to installed skills, excluding built-in slash commands."""
+    commands: dict[str, SkillInfo] = {}
+    reserved = _reserved_slash_commands()
+    for skill in list_skills():
+        command = skill.command.lower()
+        if command in reserved:
+            continue
+        commands[command] = skill
+    return commands
+
+
+def resolve_skill_command(text: str) -> tuple[SkillInfo, str] | None:
+    """Resolve ``/skill-name [request]`` when the first token is a skill alias."""
+    stripped = text.strip()
+    if not stripped.startswith("/"):
+        return None
+
+    parts = stripped.split(maxsplit=1)
+    cmd_key = parts[0].lower().replace("_", "-")
+    user_request = parts[1].strip() if len(parts) > 1 else ""
+
+    skill = get_skill_commands().get(cmd_key)
+    if skill is None:
+        return None
+
+    return skill, user_request
 
 
 def find_skill(name: str) -> SkillInfo | None:
@@ -183,7 +218,7 @@ def build_skills_index() -> str:
 
     lines = [
         "## Skills",
-        "The user has installed optional skills. If one seems relevant, suggest using `/skill <name> <request>`.",
+        "The user has installed optional skills. If one seems relevant, suggest using `/<skill-name> <request>` or `/skill <name> <request>`.",
         "",
         "<available_skills>",
     ]

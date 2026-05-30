@@ -234,6 +234,71 @@ Start with findings.
     assert saved[0][1]["content"] == message
 
 
+def test_skill_alias_loads_skill_and_calls_agent(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    skill_dir = tmp_path / "skills" / "code-review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: code-review
+description: Review code changes.
+---
+
+# Code Review
+
+Start with findings.
+""",
+        encoding="utf-8",
+    )
+    agent = FakeAgent()
+    saved = []
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/code-review review this", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert len(agent.calls) == 1
+    message = agent.calls[0]["message"]
+    assert 'The user invoked the "code-review" skill' in message
+    assert "User request:\nreview this" in message
+    assert saved[0][1]["content"] == message
+    assert "Loading skill: code-review" in output.getvalue()
+
+
+def test_skill_alias_without_request_calls_agent(tmp_path, monkeypatch):
+    monkeypatch.setenv("ASTRACLAW_HOME", str(tmp_path))
+    skill_dir = tmp_path / "skills" / "code-review"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: code-review
+description: Review code changes.
+---
+""",
+        encoding="utf-8",
+    )
+    agent = FakeAgent()
+    ui, _ = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/code-review", "/exit"]),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert len(agent.calls) == 1
+    assert 'The user invoked the "code-review" skill' in agent.calls[0]["message"]
+    assert "User request:" not in agent.calls[0]["message"]
+
+
 def test_skill_command_missing_args_does_not_call_agent():
     agent = FakeAgent()
     ui, output = _ui_and_output()

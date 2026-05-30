@@ -340,9 +340,21 @@ Why: greeting-only first turns were producing useless `/sessions` titles like "C
 - [x] `tests/agent/test_title_generator.py` - greeting skip, later substantive turn, and existing-title guard coverage
 - [x] Verified full suite: `uv run --with pytest pytest -q` -> 359 passed
 
+## v0.2.14 - Skill Slash Aliases (2026-05-30)
+
+Why: make installed skills invokable as first-class slash commands instead of only via `/skill <name> <request>`.
+
+### Completed
+
+- [x] `astra_claw/cli/skills.py` - `get_skill_commands()` and `resolve_skill_command()` map each installed skill to `/<slug>`; built-in slash commands win on collisions; `_`/`-` treated interchangeably
+- [x] `astra_claw/cli/repl.py` - dispatches skill aliases before agent turns; keeps `/skill` as explicit fallback
+- [x] `astra_claw/cli/commands.py` - tab completion includes installed skill aliases
+- [x] `tests/cli/test_skills.py`, `tests/cli/test_repl.py`, `tests/cli/test_commands.py` - alias dispatch, collision skip, completion, and underscore alias coverage
+- [x] Verified full suite: `uv run --with pytest pytest -q` -> 367 passed
+
 ## Next
 
-- [ ] Skills polish: `/{skill-name}` slash alias, optional install flow, or richer frontmatter.
+- [ ] Skills polish: optional install flow or richer frontmatter.
 
 ## Planned
 
