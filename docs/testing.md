@@ -20,6 +20,7 @@ python -m pytest tests/agent/test_context_compactor.py -v
 python -m pytest tests/agent/test_context_compactor.py tests/agent/test_loop.py tests/cli/test_repl.py tests/test_session.py -v
 python -m pytest tests/cli tests/agent -v
 python -m pytest tests/cli -v
+python -m pytest tests/cli/test_usage.py tests/cli/test_repl.py::test_usage_command_does_not_call_agent -v
 python -m pytest tests/cli/test_context_refs.py tests/cli/test_context_completion.py tests/cli/test_repl.py -v
 python -m pytest tests/cli/test_skills.py tests/cli/test_repl.py -v
 python -m pytest tests/tools/test_skills_tool.py -v
@@ -46,7 +47,8 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 - `tests/agent/test_loop.py`: mocked loop tests, including provider fallback and stream callback behavior
 - `tests/agent/test_events.py`: `AgentEvents` hooks (thinking toggle, tool start/complete ordering, back-compat, compaction silence)
 - `tests/agent/test_context_compactor.py`: compaction budget, protected window, and summary reuse tests
-- `tests/cli/`: slash command, completion, skill discovery/invocation, context-reference expansion and fuzzy completion, REPL routing, and tool-display preview/summary tests
+- `tests/cli/test_usage.py`: pure `/usage` snapshot builder coverage (empty history, would-compact, breakdown sum)
+- `tests/cli/`: slash command, completion, skill discovery/invocation, context-reference expansion and fuzzy completion, REPL routing, `/usage` snapshot tests, and tool-display preview/summary tests
 - `tests/test_session.py`: JSONL session persistence and JSONL session-search tests
 - `tests/tools/`: tool-level tests for file, patch, shell, search, web, memory, skills, and session-search behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls

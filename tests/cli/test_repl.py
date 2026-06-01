@@ -5,7 +5,7 @@ import pytest
 from rich.console import Console
 
 from astra_claw import constants
-from astra_claw.agent.context_compactor import CompactionOutcome
+from astra_claw.agent.context_compactor import CompactionOutcome, CompactionConfig, ContextCompactor
 from astra_claw.cli.repl import run_interactive_repl
 from astra_claw.cli.ui import CliUI
 
@@ -522,3 +522,47 @@ def test_auto_title_uses_summary_model_when_set():
         )
 
     assert calls[0]["model"] == "cheap-model"
+
+
+class UsageFakeAgent:
+    primary_route = {"provider": "openai", "model": "gpt-test"}
+    compression_enabled = True
+    memory_store = None
+    calls = []
+
+    def __init__(self):
+        self.compactor = ContextCompactor(
+            CompactionConfig(
+                context_window=128000,
+                threshold_ratio=0.80,
+                reserve_tokens=4000,
+                keep_first_n=2,
+                keep_last_n=6,
+                max_passes=2,
+            )
+        )
+
+    def get_system_prompt_text(self):
+        return "system prompt"
+
+    def run_conversation(self, *args, **kwargs):
+        self.calls.append("run")
+        return "hi", []
+
+
+def test_usage_command_does_not_call_agent():
+    agent = UsageFakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-usage",
+        prompt_session=FakePromptSession(["/usage", "/exit"]),
+        ui=ui,
+        load_session_meta_fn=lambda session_id: {"id": session_id, "compactions": 0},
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert "Usage" in output.getvalue()
+    assert "Context" in output.getvalue()

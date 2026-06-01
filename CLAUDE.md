@@ -60,7 +60,8 @@ astra-claw/
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- skills.py         # lightweight SKILL.md discovery + one-turn invocation helpers
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
-|   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + tool line
+|   |   |-- usage.py          # pure /usage snapshot builder (no Rich deps)
+|   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + usage panel + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # persistent history compaction rules + token estimation
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
@@ -118,7 +119,8 @@ agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_to
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/context_refs.py (imports constants, session, tools.path_safety)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display)
+cli/usage.py       (pure helpers; no Rich or prompt_toolkit)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display, cli.usage)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -142,6 +144,7 @@ __main__.py        (imports loop + cli + session)
 - Lightweight skills live under `~/.astraclaw/skills/**/SKILL.md`. `cli/skills.py` discovers metadata, `/skills` lists installed skills, `/<skill-name> [request]` or `/skill <name> <request>` injects full skill content for one turn, `tools/skills_tool.py` exposes agent-driven `list`/`view`, and `prompt_builder.py` only adds the compact skill index.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
+- `/usage` is a local CLI command that shows estimated context budget, compaction threshold/headroom, memory char usage, and last-turn heartbeat stats without calling the LLM.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.

@@ -53,6 +53,7 @@ It is not designed as:
 - Persistent memory across sessions via `MEMORY.md` (agent notes) and `USER.md` (user profile), injected into the system prompt as a frozen snapshot
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
 - Persistent context compaction for long sessions with manual `/compact` and automatic preflight compaction
+- `/usage` context panel: estimated context budget (system/tools/history breakdown), compaction threshold/headroom, memory char limits, and last-turn heartbeat stats — no LLM call
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 - Live CLI feedback: heartbeat spinner with elapsed time, tool count, and rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`), one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
 
@@ -142,7 +143,7 @@ astra> hey
 Hello! How can I help you?
 ```
 
-Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/skills`, `/skill`, `/exit`, `/quit`.
+Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/skills`, `/skill`, `/exit`, `/quit`.
 
 Attach local context inline:
 
@@ -222,7 +223,8 @@ astra-claw/
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- skills.py         # markdown skill discovery + invocation message builder
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
-|   |   `-- ui.py             # Rich output helpers + heartbeat spinner + tool line
+|   |   |-- usage.py          # pure /usage snapshot builder (no Rich deps)
+|   |   `-- ui.py             # Rich output helpers + heartbeat spinner + usage panel + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # history compaction rules + token estimation
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)

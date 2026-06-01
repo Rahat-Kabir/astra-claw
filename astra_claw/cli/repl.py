@@ -27,6 +27,7 @@ from .context_refs import expand_context_references
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
+from .usage import build_usage_snapshot
 
 
 def build_prompt_session() -> PromptSession:
@@ -170,6 +171,15 @@ def _run_loop(
                     dropped_messages=outcome.dropped_messages,
                     passes=outcome.passes,
                 )
+            elif command.name == "/usage":
+                snapshot = build_usage_snapshot(
+                    agent=agent,
+                    session_id=active_session_id,
+                    history=active_history,
+                    session_meta=load_session_meta_fn(active_session_id),
+                    heartbeat=cli_ui.get_heartbeat_snapshot(),
+                )
+                cli_ui.print_usage_panel(snapshot)
             elif command.name == "/skills":
                 cli_ui.print_skills(list_skills())
             elif command.name == "/skill":

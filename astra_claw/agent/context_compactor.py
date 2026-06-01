@@ -57,6 +57,24 @@ class ContextCompactor:
             total += _estimate_message_tokens({"role": "user", "content": pending_user_message})
         return total
 
+    def estimate_request_breakdown(
+        self,
+        *,
+        system_prompt: str,
+        history: List[Dict[str, Any]],
+        pending_user_message: Optional[str] = None,
+    ) -> tuple[int, int, int, int]:
+        return estimate_request_breakdown(
+            system_prompt=system_prompt,
+            history=history,
+            tool_schema_tokens=self._tool_schema_tokens,
+            pending_user_message=pending_user_message,
+        )
+
+    @property
+    def threshold_budget(self) -> int:
+        return compaction_threshold_budget(self.config)
+
     def should_compact(
         self,
         *,
@@ -82,11 +100,7 @@ class ContextCompactor:
             history=history,
             pending_user_message=pending_user_message,
         )
-        threshold_budget = max(
-            0,
-            int(self.config.context_window * self.config.threshold_ratio) - self.config.reserve_tokens,
-        )
-        return estimated > threshold_budget
+        return estimated > self.threshold_budget
 
     def compact(
         self,
@@ -161,6 +175,32 @@ class ContextCompactor:
             dropped_messages=total_dropped if did_compact else 0,
             passes=passes,
         )
+
+
+def compaction_threshold_budget(config: CompactionConfig) -> int:
+    """Token budget above which preflight compaction triggers."""
+    return max(
+        0,
+        int(config.context_window * config.threshold_ratio) - config.reserve_tokens,
+    )
+
+
+def estimate_request_breakdown(
+    *,
+    system_prompt: str,
+    history: List[Dict[str, Any]],
+    tool_schema_tokens: int,
+    pending_user_message: Optional[str] = None,
+) -> tuple[int, int, int, int]:
+    """Return (system, tools, history, total) token estimates."""
+    system_tokens = _estimate_text_tokens(system_prompt)
+    history_tokens = sum(_estimate_message_tokens(message) for message in history)
+    if pending_user_message:
+        history_tokens += _estimate_message_tokens(
+            {"role": "user", "content": pending_user_message}
+        )
+    total = system_tokens + tool_schema_tokens + history_tokens
+    return system_tokens, tool_schema_tokens, history_tokens, total
 
 
 def _estimate_text_tokens(text: Any) -> int:

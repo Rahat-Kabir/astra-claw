@@ -352,6 +352,19 @@ Why: make installed skills invokable as first-class slash commands instead of on
 - [x] `tests/cli/test_skills.py`, `tests/cli/test_repl.py`, `tests/cli/test_commands.py` - alias dispatch, collision skip, completion, and underscore alias coverage
 - [x] Verified full suite: `uv run --with pytest pytest -q` -> 367 passed
 
+## v0.2.15 - Usage Panel (2026-06-01)
+
+Why: users need visibility into context pressure before auto-compact fires.
+
+### Completed
+
+- [x] `astra_claw/cli/usage.py` - `UsageSnapshot` + pure `build_usage_snapshot()` from agent, history, session meta, and heartbeat counters
+- [x] `astra_claw/agent/context_compactor.py` - `estimate_request_breakdown()`, `compaction_threshold_budget()`, and `threshold_budget` property
+- [x] `astra_claw/agent/loop.py` - public `get_system_prompt_text()` wrapper for CLI diagnostics
+- [x] `astra_claw/cli/ui.py` - `get_heartbeat_snapshot()` + Rich `print_usage_panel()` with context bar, breakdown, compaction status, memory chars, and last-turn stats
+- [x] `astra_claw/cli/commands.py` / `cli/repl.py` - `/usage` local slash command (no LLM call)
+- [x] `tests/cli/test_usage.py`, `tests/cli/test_repl.py`, `tests/cli/test_commands.py`, `tests/agent/test_context_compactor.py` - snapshot, REPL dispatch, registry, and breakdown coverage
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

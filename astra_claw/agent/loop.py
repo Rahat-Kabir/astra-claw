@@ -138,6 +138,10 @@ class AstraAgent:
             include_memory_hint=self.memory_store is not None,
         )
 
+    def get_system_prompt_text(self) -> str:
+        """Public wrapper for CLI usage / diagnostics."""
+        return self._build_system_prompt_text()
+
     def _summarize_for_compaction(
         self,
         messages_to_summarize: List[Dict[str, Any]],

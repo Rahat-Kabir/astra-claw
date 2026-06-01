@@ -12,6 +12,7 @@ from rich.status import Status
 from rich.table import Table
 
 from .commands import COMMANDS, CommandDef
+from .usage import UsageSnapshot
 
 
 def _fmt_elapsed(secs: float) -> str:
@@ -214,6 +215,116 @@ class CliUI:
         self._hb_label = label
         self._refresh_heartbeat()
 
+    def get_heartbeat_snapshot(self) -> dict:
+        """Read-only heartbeat state for /usage."""
+        elapsed = None
+        if self._hb_started is not None:
+            elapsed = max(0.0, time.monotonic() - self._hb_started)
+        return {
+            "stream_tokens": self._hb_tokens,
+            "tools": self._hb_tools,
+            "elapsed_secs": elapsed,
+            "in_progress": self._status is not None,
+        }
+
+    def print_usage_panel(self, snapshot: UsageSnapshot) -> None:
+        """Render the /usage context panel."""
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(style="bold")
+        grid.add_column()
+
+        grid.add_row("Model", f"{snapshot.provider} / {snapshot.model}")
+        grid.add_row(
+            "Session",
+            f"{snapshot.session_id} · {snapshot.message_count} messages",
+        )
+        grid.add_row("", "")
+
+        bar = _usage_progress_bar(snapshot.context_percent)
+        grid.add_row(
+            "Context",
+            (
+                f"~{_fmt_tokens(snapshot.estimated_total)} / "
+                f"{_fmt_tokens(snapshot.context_window)}  "
+                f"({snapshot.context_percent}%)"
+            ),
+        )
+        grid.add_row("", bar)
+        grid.add_row(
+            "Breakdown",
+            (
+                f"system ~{_fmt_tokens(snapshot.estimated_system)} · "
+                f"tools ~{_fmt_tokens(snapshot.estimated_tools)} · "
+                f"history ~{_fmt_tokens(snapshot.estimated_history)}"
+            ),
+        )
+
+        if snapshot.compression_enabled:
+            compact_status = (
+                f"enabled · threshold ~{_fmt_tokens(snapshot.threshold_budget)} · "
+                f"headroom ~{_fmt_tokens(snapshot.headroom)}"
+            )
+            would = "yes" if snapshot.would_compact else "no"
+            if snapshot.would_compact:
+                would = f"[yellow]{would}[/yellow]"
+            compact_status += (
+                f"\nwould compact: {would} · compactions: {snapshot.compactions}"
+            )
+            if snapshot.last_compacted_at:
+                compact_status += f"\nlast compacted: {snapshot.last_compacted_at}"
+        else:
+            compact_status = "disabled"
+        grid.add_row("Compact", compact_status)
+
+        if snapshot.memory_enabled:
+            grid.add_row("", "")
+            grid.add_row(
+                "Memory",
+                _format_memory_line(
+                    "agent",
+                    snapshot.memory_chars,
+                    snapshot.memory_limit,
+                    snapshot.memory_entries,
+                ),
+            )
+            grid.add_row(
+                "",
+                _format_memory_line(
+                    "user",
+                    snapshot.user_chars,
+                    snapshot.user_limit,
+                    snapshot.user_entries,
+                ),
+            )
+
+        grid.add_row("", "")
+        if (
+            snapshot.turn_in_progress
+            or snapshot.last_turn_stream_tokens
+            or snapshot.last_turn_tools
+        ):
+            elapsed = (
+                _fmt_elapsed(snapshot.last_turn_elapsed_secs)
+                if snapshot.last_turn_elapsed_secs is not None
+                else "—"
+            )
+            grid.add_row(
+                "Last turn",
+                (
+                    f"~{_fmt_tokens(snapshot.last_turn_stream_tokens)} streamed · "
+                    f"{snapshot.last_turn_tools} tool"
+                    f"{'s' if snapshot.last_turn_tools != 1 else ''} · "
+                    f"{elapsed}"
+                ),
+            )
+        else:
+            grid.add_row("Last turn", "—")
+        grid.add_row("", "[dim]Estimates use char/4 heuristic, not billing-grade.[/dim]")
+
+        self.console.print(
+            Panel(grid, title="[bold cyan]Usage[/]", border_style="cyan")
+        )
+
     def _render_heartbeat(self) -> str:
         parts = [self._hb_label]
         if self._hb_tools:
@@ -273,3 +384,21 @@ class CliUI:
             else:
                 line += f"  [dim]({escape(summary)})[/dim]"
         self.console.print(line)
+
+
+def _usage_progress_bar(percent: int, width: int = 28) -> str:
+    filled = max(0, min(width, round(width * percent / 100)))
+    return f"[cyan]{'█' * filled}[/cyan][dim]{'░' * (width - filled)}[/dim]"
+
+
+def _format_memory_line(
+    label: str,
+    chars: Optional[int],
+    limit: Optional[int],
+    entries: Optional[int],
+) -> str:
+    if chars is None or limit is None or limit <= 0:
+        return f"{label}  —"
+    pct = min(100, int((chars / limit) * 100))
+    count = entries if entries is not None else 0
+    return f"{label}  {pct}% — {chars:,}/{limit:,} chars ({count} entries)"

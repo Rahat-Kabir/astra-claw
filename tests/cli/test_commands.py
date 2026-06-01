@@ -19,6 +19,7 @@ def test_command_registry_contains_core_commands():
         "/sessions",
         "/new",
         "/compact",
+        "/usage",
         "/skills",
         "/skill",
         "/exit",

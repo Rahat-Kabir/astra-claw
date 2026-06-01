@@ -2,6 +2,7 @@ from astra_claw.agent.context_compactor import (
     SUMMARY_PREFIX,
     CompactionConfig,
     ContextCompactor,
+    compaction_threshold_budget,
 )
 
 
@@ -159,3 +160,32 @@ def test_compact_returns_original_history_when_summary_is_not_smaller():
 
     assert not outcome.did_compact
     assert outcome.messages == history
+
+
+def test_compaction_threshold_budget():
+    config = CompactionConfig(
+        context_window=1000,
+        threshold_ratio=0.80,
+        reserve_tokens=200,
+        keep_first_n=2,
+        keep_last_n=2,
+        max_passes=1,
+    )
+    assert compaction_threshold_budget(config) == 600
+
+
+def test_estimate_request_breakdown_sums_to_total():
+    compactor = _compactor(
+        context_window=1000,
+        tool_schemas=[{"type": "function", "name": "read_file"}],
+    )
+    history = [_message("user", "hello"), _message("assistant", "hi")]
+
+    system, tools, hist, total = compactor.estimate_request_breakdown(
+        system_prompt="system text",
+        history=history,
+    )
+
+    assert total == system + tools + hist
+    assert system > 0
+    assert hist > 0

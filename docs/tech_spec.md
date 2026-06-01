@@ -34,7 +34,7 @@ Final Response
 
 ### Context Compaction
 
-- `agent/context_compactor.py` estimates request size with a simple char-based heuristic over the system prompt, replay history, pending user input, and tool schemas
+- `agent/context_compactor.py` estimates request size with a simple char-based heuristic over the system prompt, replay history, pending user input, and tool schemas; `estimate_request_breakdown()` splits that total into system/tools/history for `/usage`
 - Compaction keeps the first protected turns and recent tail, then replaces the middle with one synthetic assistant summary message
 - Assistant tool-call messages stay attached to their matching tool results so tool history is not split across the compaction boundary
 - Repeated compaction folds the earlier synthetic summary into the next summary instead of stacking many summaries
@@ -130,10 +130,19 @@ Final Response
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
 - Rich is used for light output: startup banner, help, session table, warnings, errors, and the live feedback spinner
-- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; skill aliases (`/<skill-name>`) and `/skill` rewrite the prompt before the LLM call, and the others are not sent to the LLM
+- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; skill aliases (`/<skill-name>`) and `/skill` rewrite the prompt before the LLM call, and the others are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior
 - `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
+- `/usage` builds a local context panel from the current replay history: estimated next-request tokens (system + tool schemas + history), compaction threshold/headroom, session compaction count, memory char limits, and last-turn heartbeat stats. Estimates reuse the compactor's char/4 heuristic; no provider billing data and no LLM call
+
+### Usage Panel
+
+- `cli/usage.py` owns the pure snapshot builder: `build_usage_snapshot(...)` returns a frozen `UsageSnapshot` dataclass from the live agent, active history, session meta, and heartbeat counters
+- `agent/context_compactor.py` exposes `estimate_request_breakdown()` and `compaction_threshold_budget()` so `/usage` and compaction share one threshold formula
+- `agent/loop.py` exposes `get_system_prompt_text()` so the CLI can estimate system-prompt size without reaching into private helpers
+- `cli/ui.py` renders the Rich panel via `print_usage_panel(snapshot)` and exposes read-only heartbeat state through `get_heartbeat_snapshot()`
+- Last-turn streamed tokens come from the same heartbeat counters used during agent turns (`len(token) // 4`); they reset when the turn ends
 
 ### Lightweight Skills
 
@@ -283,7 +292,8 @@ agent/loop.py      (imports config, llm, memory, prompt_builder, registry, event
 cli/context_refs.py (imports constants, session, tools.path_safety)
 cli/skills.py       (imports constants; no Rich or prompt_toolkit)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.skills, cli.tool_display)
+cli/usage.py       (pure helpers; no Rich or prompt_toolkit)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.skills, cli.tool_display, cli.usage)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -333,7 +343,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/tools/test_patch_tool.py` covers exact replacement, deletion, no-match, multi-match, `replace_all`, protected paths, workspace escapes, and schema registration
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
-- `tests/cli/` covers slash commands, completion, skill discovery/invocation, REPL routing, context-reference expansion, session switching, and stream callback use
+- `tests/cli/` covers slash commands, completion, skill discovery/invocation, REPL routing, `/usage` snapshot tests, context-reference expansion, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, session-search behavior, and the memory tool wrapper
 - `tests/tools/test_web_tools.py` covers Tavily schema gating, normalization, truncation, and validation errors
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
