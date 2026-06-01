@@ -365,6 +365,18 @@ Why: users need visibility into context pressure before auto-compact fires.
 - [x] `astra_claw/cli/commands.py` / `cli/repl.py` - `/usage` local slash command (no LLM call)
 - [x] `tests/cli/test_usage.py`, `tests/cli/test_repl.py`, `tests/cli/test_commands.py`, `tests/agent/test_context_compactor.py` - snapshot, REPL dispatch, registry, and breakdown coverage
 
+## v0.2.16 - Markdown Rendering (2026-06-01)
+
+Why: assistant replies often use Markdown syntax; plain streaming showed raw `**` and list markers in the terminal.
+
+### Completed
+
+- [x] `astra_claw/config.py` - `cli.render_markdown` default (`false` keeps live token streaming)
+- [x] `astra_claw/cli/ui.py` - `begin_assistant_response()`, `finish_assistant_response()`, and `set_render_markdown()`; buffers tokens when enabled, prints Rich `Markdown` after the turn
+- [x] `astra_claw/cli/repl.py` / `__main__.py` - read config per turn; interactive and one-shot modes use the same finish path
+- [x] Session JSONL still stores raw assistant text; only display changes
+- [x] `tests/cli/test_ui_markdown.py` and REPL integration coverage in `tests/cli/test_repl.py`
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

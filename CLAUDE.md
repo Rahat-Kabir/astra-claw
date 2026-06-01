@@ -61,7 +61,7 @@ astra-claw/
 |   |   |-- skills.py         # lightweight SKILL.md discovery + one-turn invocation helpers
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
 |   |   |-- usage.py          # pure /usage snapshot builder (no Rich deps)
-|   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + usage panel + tool line
+|   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + usage panel + Markdown finish + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # persistent history compaction rules + token estimation
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
@@ -145,6 +145,7 @@ __main__.py        (imports loop + cli + session)
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - `/usage` is a local CLI command that shows estimated context budget, compaction threshold/headroom, memory char usage, and last-turn heartbeat stats without calling the LLM.
+- `cli.render_markdown` in config toggles Rich Markdown rendering for assistant replies after each turn (default off). When off, tokens stream live as plain text; when on, the CLI buffers during the turn and prints formatted output via `CliUI.finish_assistant_response()`. Session JSONL keeps raw assistant text.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.

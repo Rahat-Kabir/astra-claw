@@ -46,7 +46,7 @@ It is not designed as:
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
 - Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>` or `/<skill-name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles after the first substantive exchange (skips greeting-only openers; daemon-thread, silent-fail)
-- Streams responses as tokens arrive
+- Streams responses as tokens arrive (plain text by default; optional Rich Markdown rendering after each turn)
 - Supports OpenAI and OpenRouter
 - Retries once on a fallback provider/model for transient LLM failures
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
@@ -54,6 +54,7 @@ It is not designed as:
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
 - Persistent context compaction for long sessions with manual `/compact` and automatic preflight compaction
 - `/usage` context panel: estimated context budget (system/tools/history breakdown), compaction threshold/headroom, memory char limits, and last-turn heartbeat stats — no LLM call
+- Optional Markdown rendering for assistant replies via `cli.render_markdown` (buffers during the turn, prints formatted bold/lists/headings when the turn ends; session JSONL still stores raw text)
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 - Live CLI feedback: heartbeat spinner with elapsed time, tool count, and rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`), one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
 
@@ -224,7 +225,7 @@ astra-claw/
 |   |   |-- skills.py         # markdown skill discovery + invocation message builder
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
 |   |   |-- usage.py          # pure /usage snapshot builder (no Rich deps)
-|   |   `-- ui.py             # Rich output helpers + heartbeat spinner + usage panel + tool line
+|   |   `-- ui.py             # Rich output helpers + heartbeat spinner + usage panel + Markdown finish + tool line
 |   |-- agent/
 |   |   |-- context_compactor.py # history compaction rules + token estimation
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
@@ -310,9 +311,13 @@ memory:
   user_char_limit: 1375
 session:
   auto_title: true   # title after the first substantive exchange (greetings skipped)
+cli:
+  render_markdown: false   # true = Rich Markdown after each assistant turn (no live token stream)
 ```
 
 If `tools.enabled_toolsets` is omitted, all registered and available tools are exposed.
+
+Set `cli.render_markdown: true` when you want assistant replies formatted in the terminal (bold, lists, headings) instead of raw `**markdown**` syntax. Default is off so existing users keep live token streaming.
 
 `web_search` and `web_extract` are exposed only when `TAVILY_API_KEY` is set.
 

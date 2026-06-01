@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
 
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.markup import escape
 from rich.panel import Panel
 from rich.status import Status
@@ -35,8 +36,10 @@ def _fmt_tokens(n: int) -> str:
 class CliUI:
     """Small wrapper around Rich so REPL logic stays testable."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Optional[Console] = None, *, render_markdown: bool = False):
         self.console = console or Console()
+        self.render_markdown = render_markdown
+        self._assistant_streamed = False
         self._status: Optional[Status] = None
         self._hb_started: Optional[float] = None
         self._hb_tools: int = 0
@@ -143,7 +146,31 @@ class CliUI:
         )
 
     def stream_token(self, token: str) -> None:
+        if self.render_markdown:
+            return
+        self._assistant_streamed = True
         self.console.print(token, end="", markup=False, highlight=False)
+
+    def begin_assistant_response(self) -> None:
+        """Reset per-turn assistant output state before streaming."""
+        self._assistant_streamed = False
+
+    def finish_assistant_response(self, full_text: str) -> None:
+        """Finalize assistant output — render Markdown or trailing newline after plain stream."""
+        text = (full_text or "").strip()
+        if not text:
+            return
+        if self.render_markdown:
+            self.console.print(Markdown(full_text))
+            return
+        if self._assistant_streamed:
+            self.console.print()
+            return
+        self.console.print(full_text, markup=False, highlight=False)
+
+    def set_render_markdown(self, enabled: bool) -> None:
+        """Toggle Markdown rendering for assistant replies."""
+        self.render_markdown = bool(enabled)
 
     def newline(self) -> None:
         self.console.print()

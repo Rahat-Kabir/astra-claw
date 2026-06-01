@@ -32,6 +32,7 @@ class FakePromptSession:
 
 class FakeAgent:
     def __init__(self):
+        self.config = {"cli": {"render_markdown": False}}
         self.calls = []
         self.last_compaction_outcome = None
         self.last_replay_history = []
@@ -566,3 +567,40 @@ def test_usage_command_does_not_call_agent():
     assert agent.calls == []
     assert "Usage" in output.getvalue()
     assert "Context" in output.getvalue()
+
+
+def test_markdown_mode_renders_assistant_reply_without_raw_stars():
+    class MarkdownAgent(FakeAgent):
+        def run_conversation(
+            self,
+            message,
+            conversation_history=None,
+            stream_writer=None,
+            *,
+            events=None,
+            clarify_callback=None,
+            current_session_id=None,
+        ):
+            if stream_writer is not None:
+                stream_writer("**Hello**")
+            return "**Hello**", [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": "**Hello**"},
+            ]
+
+    agent = MarkdownAgent()
+    agent.config = {"cli": {"render_markdown": True}}
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-md",
+        prompt_session=FakePromptSession(["hi", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: None,
+        patch_stdout_enabled=False,
+    )
+
+    rendered = output.getvalue()
+    assert "**Hello**" not in rendered
+    assert "Hello" in rendered

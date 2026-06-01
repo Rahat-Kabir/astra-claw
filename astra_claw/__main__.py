@@ -151,8 +151,10 @@ def main():
     if is_one_shot:
         message = " ".join(sys.argv[1:])
         message = expand_context_references(message)
+        ui = CliUI()
+        ui.set_render_markdown(bool((agent.config.get("cli") or {}).get("render_markdown", False)))
         response, _ = agent.run_conversation(message)
-        print(response)
+        ui.finish_assistant_response(response or "")
         return
 
     # Resume existing session or create new one

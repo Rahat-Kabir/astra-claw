@@ -48,6 +48,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "session": {
         "auto_title": True,
     },
+    "cli": {
+        "render_markdown": False,
+    },
 }
 
 

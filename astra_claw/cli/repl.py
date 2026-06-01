@@ -221,6 +221,9 @@ def _run_loop(
             current_session_id=active_session_id,
         )
 
+        cli_ui.set_render_markdown(_render_markdown_enabled(agent))
+        cli_ui.begin_assistant_response()
+
         def _stream_writer(token: str) -> None:
             cli_ui.bump_tokens(max(1, len(token) // 4))
             cli_ui.stream_token(token)
@@ -236,8 +239,7 @@ def _run_loop(
             )
         finally:
             cli_ui.stop_thinking()
-        if response:
-            cli_ui.newline()
+        cli_ui.finish_assistant_response(response or "")
 
         compaction_outcome = getattr(agent, "last_compaction_outcome", None)
         replay_history = list(getattr(agent, "last_replay_history", []))
@@ -270,6 +272,12 @@ def _run_loop(
         )
         if title_thread is not None:
             pending_title_threads.append(title_thread)
+
+
+def _render_markdown_enabled(agent) -> bool:
+    config = getattr(agent, "config", {}) or {}
+    cli_cfg = config.get("cli") or {}
+    return bool(cli_cfg.get("render_markdown", False))
 
 
 def _build_agent_events(cli_ui: CliUI) -> AgentEvents:

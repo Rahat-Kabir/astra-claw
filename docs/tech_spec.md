@@ -144,6 +144,15 @@ Final Response
 - `cli/ui.py` renders the Rich panel via `print_usage_panel(snapshot)` and exposes read-only heartbeat state through `get_heartbeat_snapshot()`
 - Last-turn streamed tokens come from the same heartbeat counters used during agent turns (`len(token) // 4`); they reset when the turn ends
 
+### Markdown Rendering
+
+- `cli.render_markdown` in `config.yaml` toggles formatted assistant output (default `false`)
+- When off, `cli/ui.py` streams tokens live via `stream_token()` with `markup=False` (raw text, including `**`)
+- When on, the REPL buffers streamed tokens during the turn (spinner only), then `finish_assistant_response(full_text)` prints the full reply once through Rich `Markdown`
+- `begin_assistant_response()` resets per-turn stream state; plain mode adds a trailing newline after the streamed block
+- Interactive mode reads the flag from `agent.config` each turn via `set_render_markdown()`; one-shot mode in `__main__.py` uses the same `CliUI.finish_assistant_response()` path
+- Session JSONL and compaction replay keep the raw assistant string; rendering is display-only
+
 ### Lightweight Skills
 
 - Skills are user-owned markdown files at `~/.astraclaw/skills/**/SKILL.md`
@@ -176,8 +185,8 @@ Final Response
 - `agent/streaming.py` fires `on_thinking(True)` before each streamed LLM call and `on_thinking(False)` on the first content or tool-call delta; compaction summary streams are called with `on_thinking=None` so the user's spinner only tracks user-facing turns
 - `agent/tool_runner.py` brackets every dispatch with `on_tool_start` / `on_tool_complete` and preserves the `memory` tool special-case that injects the agent's `MemoryStore`
 - `cli/tool_display.py` holds pure preview + summary helpers (no Rich deps): `build_tool_preview` picks the primary arg per tool (path, pattern, command, action+target) and `summarize_tool_result` parses the JSON result into a short human label (line counts, `+N -M` for patch, exit codes for shell, session counts for `session_search`, etc.)
-- `cli/ui.py` owns a heartbeat spinner: `start_thinking(label)` starts or resumes preserving counters, `pause_thinking()` hides it without resetting state so streamed tokens print cleanly, `stop_thinking()` fully resets at turn end. The render shows `<label> · <N> tools · <elapsed> · ~<tokens> tok`, with a 0.5s daemon-thread tick so elapsed time advances during silent gaps. `bump_tool()`, `bump_tokens(n)`, and `set_heartbeat_label(label)` mutate counters between events. `print_tool_line(name, preview, summary)` renders one compact dim line per completed tool; errors show in red, no emoji
-- `cli/repl.py` builds an `AgentEvents` per turn: `on_thinking(True)` starts the heartbeat, `on_thinking(False)` pauses it during streaming, `on_tool_start` resumes with `running <tool> <preview>`, `on_tool_complete` pauses, bumps the tool counter, and prints the tool line. The `stream_writer` is wrapped to call `bump_tokens(len(token) // 4)` for a rough live token estimate. `run_conversation` is wrapped in `try/finally` so `stop_thinking()` always runs at turn end
+- `cli/ui.py` owns a heartbeat spinner: `start_thinking(label)` starts or resumes preserving counters, `pause_thinking()` hides it without resetting state so streamed tokens print cleanly, `stop_thinking()` fully resets at turn end. The render shows `<label> · <N> tools · <elapsed> · ~<tokens> tok`, with a 0.5s daemon-thread tick so elapsed time advances during silent gaps. `bump_tool()`, `bump_tokens(n)`, and `set_heartbeat_label(label)` mutate counters between events. `print_tool_line(name, preview, summary)` renders one compact dim line per completed tool; errors show in red, no emoji. Assistant replies finish through `begin_assistant_response()` / `stream_token()` / `finish_assistant_response()` (plain stream or Rich Markdown when `cli.render_markdown` is enabled)
+- `cli/repl.py` builds an `AgentEvents` per turn: `on_thinking(True)` starts the heartbeat, `on_thinking(False)` pauses it during streaming, `on_tool_start` resumes with `running <tool> <preview>`, `on_tool_complete` pauses, bumps the tool counter, and prints the tool line. The `stream_writer` is wrapped to call `bump_tokens(len(token) // 4)` for a rough live token estimate. `run_conversation` is wrapped in `try/finally` so `stop_thinking()` always runs at turn end, then `finish_assistant_response(response)` renders the assistant block
 
 ### Memory System
 
@@ -343,7 +352,7 @@ __main__.py        (imports loop + cli + session)
 - `tests/tools/test_patch_tool.py` covers exact replacement, deletion, no-match, multi-match, `replace_all`, protected paths, workspace escapes, and schema registration
 - `tests/agent/test_loop.py` also covers primary success, transient fallback success, and no-fallback cases for bad requests
 - `tests/agent/test_context_compactor.py` covers token estimation, protected windows, summary reuse, and no-benefit compaction rejection
-- `tests/cli/` covers slash commands, completion, skill discovery/invocation, REPL routing, `/usage` snapshot tests, context-reference expansion, session switching, and stream callback use
+- `tests/cli/` covers slash commands, completion, skill discovery/invocation, REPL routing, `/usage` snapshot tests, Markdown rendering tests, context-reference expansion, session switching, and stream callback use
 - `tests/tools/` contains module-level tests for file tools, shell execution, search behavior, session-search behavior, and the memory tool wrapper
 - `tests/tools/test_web_tools.py` covers Tavily schema gating, normalization, truncation, and validation errors
 - `tests/agent/` contains mocked loop tests for streaming and tool-call orchestration without live API calls
