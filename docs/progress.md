@@ -377,6 +377,16 @@ Why: assistant replies often use Markdown syntax; plain streaming showed raw `**
 - [x] Session JSONL still stores raw assistant text; only display changes
 - [x] `tests/cli/test_ui_markdown.py` and REPL integration coverage in `tests/cli/test_repl.py`
 
+## v0.2.17 - /retry Command (2026-06-01)
+
+Why: let users redo a bad answer without retyping the prompt.
+
+### Completed
+
+- [x] `astra_claw/cli/history_edit.py` - `find_last_user_message()` + `truncate_for_retry()`
+- [x] `astra_claw/cli/commands.py` / `cli/repl.py` - `/retry` truncates JSONL, archives, and re-runs the last user message
+- [x] `tests/cli/test_history_edit.py` and REPL integration tests
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

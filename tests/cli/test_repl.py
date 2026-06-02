@@ -604,3 +604,55 @@ def test_markdown_mode_renders_assistant_reply_without_raw_stars():
     rendered = output.getvalue()
     assert "**Hello**" not in rendered
     assert "Hello" in rendered
+
+
+def test_retry_rewrites_session_and_reruns_last_user_message():
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+    rewrites = []
+    archives = []
+    history = [
+        {"role": "user", "content": "first"},
+        {"role": "assistant", "content": "a1"},
+        {"role": "user", "content": "second"},
+        {"role": "assistant", "content": "a2"},
+    ]
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        history=history,
+        prompt_session=FakePromptSession(["/retry", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: None,
+        rewrite_session_fn=lambda session_id, messages, meta_updates=None: rewrites.append(
+            (session_id, messages, meta_updates)
+        ),
+        archive_session_fn=lambda session_id, reason=None: archives.append((session_id, reason)),
+        patch_stdout_enabled=False,
+    )
+
+    assert archives == [("session-1", "retry")]
+    assert rewrites[0][0] == "session-1"
+    assert rewrites[0][1] == history[:2]
+    assert len(agent.calls) == 1
+    assert agent.calls[0]["message"] == "second"
+    assert agent.calls[0]["history"] == history[:2]
+    assert "Retrying last prompt" in output.getvalue()
+
+
+def test_retry_with_empty_history_shows_warning():
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        history=[],
+        prompt_session=FakePromptSession(["/retry", "/exit"]),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert "Nothing to retry." in output.getvalue()

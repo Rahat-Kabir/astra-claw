@@ -24,6 +24,7 @@ from ..session import (
 )
 from .commands import resolve_command, AstraCompleter
 from .context_refs import expand_context_references
+from .history_edit import truncate_for_retry
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
@@ -180,6 +181,17 @@ def _run_loop(
                     heartbeat=cli_ui.get_heartbeat_snapshot(),
                 )
                 cli_ui.print_usage_panel(snapshot)
+            elif command.name == "/retry":
+                truncated, user_text = truncate_for_retry(active_history)
+                if user_text is None:
+                    cli_ui.print_warning("Nothing to retry.")
+                    continue
+
+                archive_session_fn(active_session_id, reason="retry")
+                rewrite_session_fn(active_session_id, truncated)
+                active_history = list(truncated)
+                message = user_text
+                cli_ui.print_success("Retrying last prompt…")
             elif command.name == "/skills":
                 cli_ui.print_skills(list_skills())
             elif command.name == "/skill":
@@ -201,7 +213,7 @@ def _run_loop(
             else:
                 continue
 
-            if command.name != "/skill":
+            if command.name not in ("/skill", "/retry"):
                 continue
         else:
             resolved = resolve_skill_command(message)

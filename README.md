@@ -54,6 +54,7 @@ It is not designed as:
 - Global `SOUL.md` persona file loaded from `~/.astraclaw/SOUL.md` as the primary identity layer
 - Persistent context compaction for long sessions with manual `/compact` and automatic preflight compaction
 - `/usage` context panel: estimated context budget (system/tools/history breakdown), compaction threshold/headroom, memory char limits, and last-turn heartbeat stats — no LLM call
+- `/retry` removes the last user turn (including tool calls) and re-runs the same prompt
 - Optional Markdown rendering for assistant replies via `cli.render_markdown` (buffers during the turn, prints formatted bold/lists/headings when the turn ends; session JSONL still stores raw text)
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 - Live CLI feedback: heartbeat spinner with elapsed time, tool count, and rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`), one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
@@ -144,7 +145,7 @@ astra> hey
 Hello! How can I help you?
 ```
 
-Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/skills`, `/skill`, `/exit`, `/quit`.
+Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/retry`, `/skills`, `/skill`, `/exit`, `/quit`.
 
 Attach local context inline:
 
@@ -224,6 +225,7 @@ astra-claw/
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- skills.py         # markdown skill discovery + invocation message builder
 |   |   |-- tool_display.py   # pure preview + result-summary helpers for tool feedback
+|   |   |-- history_edit.py   # pure /retry history truncation helpers
 |   |   |-- usage.py          # pure /usage snapshot builder (no Rich deps)
 |   |   `-- ui.py             # Rich output helpers + heartbeat spinner + usage panel + Markdown finish + tool line
 |   |-- agent/

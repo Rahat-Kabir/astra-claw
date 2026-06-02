@@ -23,6 +23,7 @@ COMMANDS: tuple[CommandDef, ...] = (
     CommandDef("/new", "Start a new session"),
     CommandDef("/compact", "Compact older session context"),
     CommandDef("/usage", "Show context, compaction, and memory usage"),
+    CommandDef("/retry", "Redo the last turn with the same prompt"),
     CommandDef("/skills", "List installed skills"),
     CommandDef("/skill", "Invoke a skill for one turn"),
     CommandDef("/exit", "Exit Astra-Claw", aliases=("/quit",)),

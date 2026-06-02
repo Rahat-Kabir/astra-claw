@@ -60,6 +60,7 @@ astra-claw/
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- skills.py         # lightweight SKILL.md discovery + one-turn invocation helpers
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
+|   |   |-- history_edit.py   # pure /retry history truncation helpers
 |   |   |-- usage.py          # pure /usage snapshot builder (no Rich deps)
 |   |   `-- ui.py             # Rich banner/help/session/error rendering + heartbeat spinner + usage panel + Markdown finish + tool line
 |   |-- agent/

@@ -20,6 +20,7 @@ def test_command_registry_contains_core_commands():
         "/new",
         "/compact",
         "/usage",
+        "/retry",
         "/skills",
         "/skill",
         "/exit",
