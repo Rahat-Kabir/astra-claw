@@ -35,7 +35,7 @@ It is not designed as:
 ## What It Does
 
 - Conversational AI agent with a tool-calling loop
-- Light Rich/prompt_toolkit CLI with history, slash commands, and autocomplete
+- Light Rich/prompt_toolkit CLI with history, slash commands, and autocomplete; startup banner shows the active `provider:model` route
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with dangerous-command approval
 - Searches files via `search_files` for content or filenames
@@ -138,6 +138,7 @@ Interactive mode starts a new session and saves every turn:
 $ python -m astra_claw
 ╭──────────── Astra-Claw ────────────╮
 │ Session   2026-04-10_a1b2c3d4      │
+│ Model     openai:gpt-5.4-mini      │
 │ Commands  /help                    │
 ╰────────────────────────────────────╯
 

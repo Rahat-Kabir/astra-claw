@@ -69,6 +69,17 @@ def build_route(model_config: Dict[str, Any], fallback: bool = False) -> Optiona
     return {"provider": provider, "model": model}
 
 
+def format_route_label(route: Optional[Dict[str, str]]) -> str:
+    """Return ``provider:model`` for display, or empty when route is missing."""
+    if not route:
+        return ""
+    provider = (route.get("provider") or "").strip()
+    model = (route.get("model") or "").strip()
+    if not provider or not model:
+        return ""
+    return f"{provider}:{model}"
+
+
 def complete_once(
     messages: list,
     *,

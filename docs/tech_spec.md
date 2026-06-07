@@ -129,7 +129,7 @@ Final Response
 ### CLI/TUI Layer
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
-- Rich is used for light output: startup banner, help, session table, warnings, errors, and the live feedback spinner
+- Rich is used for light output: startup banner (session id, primary `provider:model` route, optional title/workspace/resume stats), help, session table, warnings, errors, and the live feedback spinner
 - Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/retry`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; skill aliases (`/<skill-name>`) and `/skill` rewrite the prompt before the LLM call, and the others are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior

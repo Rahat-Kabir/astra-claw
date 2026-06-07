@@ -13,7 +13,7 @@ from prompt_toolkit.styles import Style
 from ..agent.events import AgentEvents
 from ..agent.title_generator import maybe_auto_title
 from ..constants import get_astraclaw_home
-from ..llm import resolve_api_key
+from ..llm import format_route_label, resolve_api_key
 from ..session import (
     archive_session,
     create_session,
@@ -69,12 +69,14 @@ def run_interactive_repl(
     resumed_title = (
         load_session_meta_fn(active_session_id).get("title") if resumed else None
     )
+    model_label = format_route_label(getattr(agent, "primary_route", None))
     cli_ui.print_banner(
         session_id=active_session_id,
         workspace=workspace,
         resumed=resumed,
         loaded_messages=len(active_history),
         title=resumed_title,
+        model=model_label or None,
     )
 
     try:

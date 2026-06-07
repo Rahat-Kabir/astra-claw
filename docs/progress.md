@@ -387,6 +387,18 @@ Why: let users redo a bad answer without retyping the prompt.
 - [x] `astra_claw/cli/commands.py` / `cli/repl.py` - `/retry` truncates JSONL, archives, and re-runs the last user message
 - [x] `tests/cli/test_history_edit.py` and REPL integration tests
 
+## v0.2.18 - Banner Model Label (2026-06-07)
+
+Why: show the active primary route at REPL startup without opening config.
+
+### Completed
+
+- [x] `astra_claw/llm.py` - `format_route_label()` returns `provider:model` from a resolved route
+- [x] `astra_claw/cli/ui.py` - startup banner adds an optional **Model** row
+- [x] `astra_claw/cli/repl.py` - passes `format_route_label(agent.primary_route)` into `print_banner`
+- [x] `tests/cli/test_ui_banner.py` - formatter + banner coverage
+- [x] Verified: `python -m pytest tests/cli/test_ui_banner.py tests -q` -> 391 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

@@ -55,11 +55,14 @@ class CliUI:
         resumed: bool = False,
         loaded_messages: int = 0,
         title: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> None:
         grid = Table.grid(padding=(0, 2))
         grid.add_column(style="bold cyan")
         grid.add_column(style="dim")
         grid.add_row("Session", session_id)
+        if model:
+            grid.add_row("Model", model)
         if title:
             grid.add_row("Title", title)
         if workspace is not None:
