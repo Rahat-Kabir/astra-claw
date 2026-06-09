@@ -61,6 +61,10 @@ class ToolRegistry:
 
         return definitions
 
+    def list_toolsets(self) -> Set[str]:
+        """Return every toolset name with at least one registered tool."""
+        return {entry["toolset"] for entry in self._tools.values()}
+
     def dispatch(self, name: str, args: dict) -> str:
         """Execute a tool handler by name. Returns a JSON string."""
         entry = self._tools.get(name)

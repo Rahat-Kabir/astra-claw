@@ -427,20 +427,39 @@ Why: let the user see a diff and approve/reject before file edits hit disk.
 - [x] `tests/tools/test_write_approval.py` (incl. no-trailing-newline diff regression)
 - [x] Verified: `python -m pytest -q` -> 408 passed
 
+## v0.3.0 - Delegation / Sub-agents (2026-06-10)
+
+Why: open the delegation chapter - let a parent agent hand a context-heavy, self-contained subtask to an isolated child whose intermediate tool output never floods the parent's context window. Only the child's final summary returns.
+
+### Completed
+
+- [x] `astra_claw/tools/delegate_tool.py` - `delegate` tool: spawns one fresh `AstraAgent` per call (blocking, depth 1), builds a focused child system prompt from `goal` + `context`, strips blocked toolsets (`delegation`/`clarify`/`memory`/`planning`/`session_search`), caps child turns (default 15 via `delegation.max_turns`, hard cap 30), and returns `{status, exit_reason, summary, turns, duration_seconds, child_session_id}` JSON
+- [x] Recursion is impossible by construction: the child's toolset excludes `delegation`, so the child never sees the `delegate` schema (no depth counter needed)
+- [x] `astra_claw/agent/loop.py` - `AstraAgent(system_prompt_override=...)` lets a child replace the assembled SOUL.md + memory prompt with the briefing; loop passes `self.config` to the tool runner
+- [x] `astra_claw/agent/tool_runner.py` - `delegate` special-cased (same pattern as memory/todo/clarify): injects `parent_config` + `parent_session_id` + `events`; standalone registry dispatch returns an unavailable-error JSON
+- [x] `astra_claw/tools/registry.py` - `list_toolsets()` helper so a child enabling "all" tools can subtract the blocked set
+- [x] Child run persisted as its own JSONL session with `parent_id` in meta and a `[delegate] <goal>` title (debugging aid; a session-save failure logs and is swallowed rather than discarding a good result)
+- [x] `astra_claw/config.py` - `delegation.max_turns` default 15
+- [x] `astra_claw/cli/tool_display.py` - `delegate` preview (goal) + result summary (`N turns in Xs`, "(turn limit)" suffix on `max_turns` exit)
+- [x] `astra_claw/agent/prompt_builder.py` - TOOL_POLICY line teaching when to delegate vs do it yourself
+- [x] `scripts/smoke_delegate.py` - real end-to-end smoke against the configured model (live child tool activity, summary JSON, optional saved transcript)
+- [x] `tests/tools/test_delegate_tool.py` - 16 tests with a `FakeChildAgent` (no live LLM): schema, unavailable-standalone, summary JSON, briefing contents, memory off, toolset blocking, parent-toolset restriction, turn clamping, parent config not mutated, max-turns salvage, crash handling, child session + `parent_id` meta, event forwarding without `on_thinking`, tool_runner wiring
+- [x] Smoke surfaced a real bug mocks missed: the first child briefing lacked the "actually call the tool, don't describe" imperative, so gpt-4o-mini children hallucinated tool use (claimed to read files without calling `read_file`). Comparison run proved the normal agent fired tools 5/5 on the same model; the child 0/2 until the imperative was restored, then 5/5. Locked in with a regression assertion.
+- [x] Verified: `python -m pytest -q` -> 424 passed
+
+### Deliberately cut from the original v0.3.0 plan
+
+- Named-skill children (child inherits the parent's model route instead) - keep v1 simple
+- Context budget allocation between parent and children - the child reuses the parent's compaction config for free; revisit only if needed
+- Parallel / batch children - sequential single-child only; threading is unsafe against JSONL writes + Rich UI
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.
 
 ## Planned
 
-### v0.3.0 - Delegation / Sub-agents (chapter theme)
-
-Why: once skills exist, sub-agents get real - a parent agent can spawn a child with a different skill. Composition story.
-
-- [ ] `delegate` tool - spawn a child AstraAgent with a named skill, return its final answer
-- [ ] Session parent/child linkage in session metadata (storage-agnostic, still JSONL)
-- [ ] Context budget allocation between parent and children
-- [ ] Tests + smoke script
+(Delegation chapter opened at v0.3.0; see `docs/RELEASE_v0.3.md`.)
 
 ## Deferred (not scheduled)
 

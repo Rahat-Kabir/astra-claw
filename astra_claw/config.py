@@ -48,6 +48,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "session": {
         "auto_title": True,
     },
+    "delegation": {
+        "max_turns": 15,
+    },
     "cli": {
         "render_markdown": False,
         "confirm_edits": True,

@@ -49,6 +49,8 @@ def build_tool_preview(name: str, args: Dict[str, Any]) -> str:
         return _oneline(f"{verb} {count} item{'s' if count != 1 else ''}")
     if name == "clarify":
         return _oneline(args.get("question", ""))
+    if name == "delegate":
+        return _oneline(args.get("goal", ""))
     if name == "session_search":
         query = args.get("query")
         return _oneline(query) if query else "recent sessions"
@@ -156,6 +158,15 @@ def summarize_tool_result(name: str, result: str) -> Optional[str]:
         total = data.get("count")
         if isinstance(total, int):
             return f"{total} session{'s' if total != 1 else ''}"
+        return None
+
+    if name == "delegate":
+        turns = data.get("turns")
+        duration = data.get("duration_seconds")
+        if isinstance(turns, int) and isinstance(duration, (int, float)):
+            reason = data.get("exit_reason", "")
+            suffix = " (turn limit)" if reason == "max_turns" else ""
+            return f"{turns} turns in {duration}s{suffix}"
         return None
 
     if name == "skills":

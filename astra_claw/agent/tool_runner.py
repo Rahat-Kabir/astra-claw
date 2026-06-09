@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..memory import MemoryStore
 from ..tools.clarify_tool import clarify_tool
+from ..tools.delegate_tool import delegate_tool
 from ..tools.memory_tool import memory_tool
 from ..tools.registry import registry
 from ..tools.session_search_tool import session_search_tool
@@ -24,6 +25,7 @@ def execute_tool_calls(
     todo_store: Optional[TodoStore] = None,
     clarify_callback: Optional[Callable[[str, Optional[List[str]]], str]] = None,
     current_session_id: Optional[str] = None,
+    parent_config: Optional[Dict[str, Any]] = None,
     events: Optional[AgentEvents] = None,
 ) -> List[Dict[str, Any]]:
     """Dispatch each tool call and return the tool-role messages."""
@@ -60,6 +62,15 @@ def execute_tool_calls(
                 question=fn_args.get("question", ""),
                 choices=fn_args.get("choices"),
                 callback=clarify_callback,
+            )
+        elif fn_name == "delegate":
+            result = delegate_tool(
+                goal=fn_args.get("goal", ""),
+                context=fn_args.get("context"),
+                max_turns=fn_args.get("max_turns"),
+                parent_config=parent_config,
+                parent_session_id=current_session_id,
+                events=events,
             )
         elif fn_name == "session_search":
             result = session_search_tool(

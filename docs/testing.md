@@ -25,6 +25,7 @@ python -m pytest tests/cli/test_ui_markdown.py tests/cli/test_repl.py::test_mark
 python -m pytest tests/cli/test_usage.py tests/cli/test_repl.py::test_usage_command_does_not_call_agent -v
 python -m pytest tests/cli/test_model_command.py -v
 python -m pytest tests/tools/test_write_approval.py -v
+python -m pytest tests/tools/test_delegate_tool.py -v
 python -m pytest tests/cli/test_context_refs.py tests/cli/test_context_completion.py tests/cli/test_repl.py -v
 python -m pytest tests/cli/test_skills.py tests/cli/test_repl.py -v
 python -m pytest tests/tools/test_skills_tool.py -v
@@ -55,6 +56,7 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 - `tests/cli/test_usage.py`: pure `/usage` snapshot builder coverage (empty history, would-compact, breakdown sum)
 - `tests/cli/test_model_command.py`: `parse_model_arg` (explicit/bare/malformed) + `set_primary_route` in-place switch
 - `tests/tools/test_write_approval.py`: write-approval default-allow, write_file/patch reject (no write) + approve (writes), diff passed to callback, no-trailing-newline diff regression, REPL "always" latch
+- `tests/tools/test_delegate_tool.py`: delegate tool with a `FakeChildAgent` (no live LLM) - schema, unavailable-standalone dispatch, summary JSON, briefing contents (incl. anti-hallucination imperative regression), child config (memory off / blocked toolsets / turn clamping / parent not mutated), max-turns salvage, crash handling, child session + `parent_id` meta, event forwarding without `on_thinking`, tool_runner special-casing
 - `tests/cli/test_ui_markdown.py`: Markdown buffer/finish behavior and plain-stream trailing newline
 - `tests/cli/`: slash command, completion, skill discovery/invocation, context-reference expansion and fuzzy completion, REPL routing, `/usage` snapshot tests, Markdown rendering tests, and tool-display preview/summary tests
 - `tests/test_session.py`: JSONL session persistence and JSONL session-search tests

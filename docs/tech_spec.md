@@ -223,12 +223,23 @@ Final Response
 - Toolset `clarify` (can be disabled via `tools.enabled_toolsets`).
 - Out of scope for v1: arrow-key navigation, timeout / auto-proceed, non-CLI gateway wiring. The CLI-only assumption lets us block on `input()` without threads or queues.
 
+### Delegation / Sub-agents
+
+- `astra_claw/tools/delegate_tool.py` exposes the `delegate` tool (toolset `delegation`). It spawns one fresh `AstraAgent` per call, runs it to completion **synchronously**, and returns its final message as a JSON summary. v1 is single-child and blocking — no threading, no parallel/batch mode (threading is unsafe against JSONL writes and the Rich UI).
+- **Isolation is the whole point.** The child runs in a brand-new context with no parent history. Its system prompt is a focused briefing built from `goal` + `context` only — the parent must pass every needed fact (file paths, error messages, constraints) explicitly. The child's intermediate tool calls and reasoning never enter the parent's context window; only the summary does.
+- **Child construction.** `_build_child_config()` deep-copies the parent config, disables memory (`enabled` / `user_profile_enabled` = False), caps turns (`delegation.max_turns`, default 15, hard cap 30), and sets the child's `enabled_toolsets` to the parent's set (or all registered toolsets when the parent enables "all") **minus** the blocked set `{delegation, clarify, memory, planning, session_search}`. The child is built via `AstraAgent(config=..., system_prompt_override=briefing)`, where `system_prompt_override` short-circuits `_build_system_prompt_text()` so SOUL.md + memory are skipped.
+- **Recursion is impossible by construction.** Because `delegation` is a blocked toolset, the child's tool schemas never include `delegate` — it cannot see, let alone call, the delegation tool. No depth counter is needed (contrast hermes-agent, which uses a `MAX_DEPTH` counter to allow grandchildren).
+- **Exit handling.** Natural finish (assistant reply, no tool calls) → `exit_reason: "completed"`. Hitting the turn cap returns the loop's sentinel text, which `_detect_exit()` discards in favor of the child's last substantive assistant message → `exit_reason: "max_turns"` with the partial findings preserved. An exception returns `{"status": "error", ...}` so the parent can re-plan.
+- **Child session persistence.** Each child run is saved as its own JSONL session via `create_session()` + `rewrite_session()` with `parent_id` in the meta line and a `[delegate] <goal>` title — a debugging aid. This is the one place an exception is swallowed (logged warning): a session-save failure must not discard an otherwise-successful delegation result.
+- **The briefing prompt matters more than the orchestration.** The child briefing must include the imperative "actually call the tool, don't describe" — without it, weaker models (observed on gpt-4o-mini) hallucinate tool use and report fabricated results. This was caught only by the real-model smoke (`scripts/smoke_delegate.py`), not by the mocked unit tests, and is now guarded by a regression assertion.
+
 ### Special-Case Tool Injection
 
 - `memory`: injects the agent `MemoryStore`
 - `todo`: injects the per-session `TodoStore`
 - `clarify`: injects the CLI callback
 - `session_search`: injects `current_session_id` so the active session never appears in recall results
+- `delegate`: injects `parent_config` (for child construction), `parent_session_id` (for the child's `parent_id` link), and `events` (forwarded to the child with `on_thinking` stripped, so the parent spinner only tracks user-facing turns)
 
 ### Session Title Auto-generation
 

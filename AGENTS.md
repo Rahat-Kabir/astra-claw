@@ -83,7 +83,8 @@ astra-claw/
 |       |-- memory_tool.py    # memory tool - schema + JSON wrapper over MemoryStore
 |       |-- todo_tool.py      # todo tool - session-scoped TodoStore + schema
 |       |-- skills_tool.py    # skills tool - list/view installed SKILL.md files
-|       `-- clarify_tool.py   # clarify tool - thin shell, delegates to platform callback
+|       |-- clarify_tool.py   # clarify tool - thin shell, delegates to platform callback
+|       `-- delegate_tool.py  # delegate tool - spawn one isolated child AstraAgent for a subtask
 |-- tests/
 |   |-- agent/               # mocked agent loop tests (includes compaction coverage)
 |   |-- cli/                 # CLI command/completion/REPL tests
@@ -154,6 +155,7 @@ __main__.py        (imports loop + cli + session)
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).
 - The `todo` tool is special-cased the same way in `agent/tool_runner.py`: `TodoStore` is owned by the agent (one per session), and active items are re-injected as a synthetic user message after context compaction so the plan survives.
 - The `clarify` tool is also special-cased in `agent/tool_runner.py`: `run_conversation` accepts `clarify_callback`, the runner injects it into the handler, and the CLI callback lives in `cli/repl.py::_build_clarify_callback`. Without a callback the handler returns an unavailable-error JSON so non-interactive callers don't hang.
+- The `delegate` tool is special-cased the same way in `agent/tool_runner.py`: the runner injects `parent_config`, `parent_session_id` (from `current_session_id`), and `events`. It spawns one fresh `AstraAgent` per call (blocking, depth 1), built via `AstraAgent(config=..., system_prompt_override=briefing)` where the override skips SOUL.md + memory. The child config disables memory, caps turns (`delegation.max_turns`, default 15, hard cap 30), and strips the blocked toolsets `{delegation, clarify, memory, planning, session_search}` - so the child never sees the `delegate` schema and recursion is impossible (no depth counter). Only the child's final message returns, as a JSON summary. Each child run is saved as its own JSONL session with `parent_id` in meta. Standalone `registry.dispatch("delegate", ...)` returns an unavailable-error JSON. The child briefing MUST keep the "actually call the tool, don't describe" imperative or weak models hallucinate tool use (regression-guarded). Real end-to-end check: `scripts/smoke_delegate.py`.
 - The `session_search` tool is special-cased in `agent/tool_runner.py`: `run_conversation` accepts `current_session_id`, the runner injects it into the handler, and search excludes the active session from both recent and query modes.
 - `web_search` and `web_extract` live in `tools/web_tools.py`, use Tavily in v1, and are hidden unless `TAVILY_API_KEY` is set.
 - Memory content is scanned for prompt-injection / exfiltration / invisible-unicode payloads before being persisted, because entries are injected into the system prompt.

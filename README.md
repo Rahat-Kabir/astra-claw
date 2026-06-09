@@ -44,6 +44,7 @@ It is not designed as:
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
 - Asks one clarifying question via `clarify` when a request is ambiguous (multiple-choice or open-ended, CLI-only)
+- Delegates context-heavy subtasks via `delegate` to an isolated child agent that returns only a summary (one child, blocking, depth 1)
 - Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>` or `/<skill-name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles after the first substantive exchange (skips greeting-only openers; daemon-thread, silent-fail)
 - Streams responses as tokens arrive (plain text by default; optional Rich Markdown rendering after each turn)
@@ -251,7 +252,8 @@ astra-claw/
 |       |-- memory_tool.py    # memory tool (add/replace/remove)
 |       |-- todo_tool.py      # session todo list (plan + track tasks)
 |       |-- skills_tool.py    # list/view installed SKILL.md files
-|       `-- clarify_tool.py   # ask one clarifying question via the CLI callback
+|       |-- clarify_tool.py   # ask one clarifying question via the CLI callback
+|       `-- delegate_tool.py  # spawn one isolated child agent for a self-contained subtask
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
 |   |-- cli/                 # slash command, skill, and REPL tests
@@ -333,6 +335,8 @@ Fallback retries only apply to transient/runtime failures such as timeouts, conn
 Context compaction rewrites long interactive session transcripts after archiving the old JSONL, so resumed sessions replay the compacted history instead of the full original middle.
 
 `session_search` adds JSONL-based cross-session recall: empty query lists recent sessions; non-empty query runs a two-pass reranked search over session titles and message content, with current-session exclusion.
+
+`delegate` spawns one focused child `AstraAgent` for a self-contained subtask. The child runs in an isolated context (no parent history, no SOUL.md, no memory snapshot) and only knows the `goal` + `context` the parent passes; its final message returns to the parent as a summary, so the child's intermediate tool output never enters the parent's context window. v1 limits: one child at a time, blocking, depth 1 (children cannot delegate). The child's turn cap defaults to `delegation.max_turns` (15) and each run is saved as its own JSONL session with a `parent_id` for debugging. See `scripts/smoke_delegate.py` for an end-to-end run against the configured model.
 
 ## Testing
 

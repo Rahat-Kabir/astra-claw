@@ -24,6 +24,7 @@ from ..tools.todo_tool import TodoStore
 
 # Import tool modules so they register themselves at agent import time.
 from ..tools import clarify_tool as clarify_tool_module  # noqa: F401
+from ..tools import delegate_tool as delegate_tool_module  # noqa: F401
 from ..tools import file_tools  # noqa: F401
 from ..tools import memory_tool as memory_tool_module  # noqa: F401
 from ..tools import patch_tool  # noqa: F401
@@ -38,8 +39,15 @@ from ..tools import web_tools  # noqa: F401
 class AstraAgent:
     """AI Agent with tool calling capabilities."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        system_prompt_override: Optional[str] = None,
+    ):
         self.config = config or load_config()
+        # Delegated child agents replace the assembled prompt (SOUL.md +
+        # memory) with a focused briefing. None = normal assembly.
+        self.system_prompt_override = system_prompt_override
         model_config = self.config.get("model", {})
         tool_config = self.config.get("tools", {})
         compression_config = self.config.get("compression", {})
@@ -152,6 +160,8 @@ class AstraAgent:
         raise RuntimeError("No LLM route available.")
 
     def _build_system_prompt_text(self) -> str:
+        if self.system_prompt_override is not None:
+            return self.system_prompt_override
         return build_system_prompt(
             memory_store=self.memory_store,
             include_memory_hint=self.memory_store is not None,
@@ -337,6 +347,7 @@ class AstraAgent:
                 todo_store=self.todo_store,
                 clarify_callback=clarify_callback,
                 current_session_id=current_session_id,
+                parent_config=self.config,
                 events=events,
             )
             history_messages.extend(tool_messages)

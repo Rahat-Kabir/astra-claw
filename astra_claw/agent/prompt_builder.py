@@ -27,7 +27,8 @@ TOOL_POLICY = """Tool usage guidelines:
 - Use web_extract to read selected URLs after you identify relevant pages
 - Use session_search for cross-session recall: previous work, past fixes, or "what were we doing before?"
 - Prefer dedicated file tools over shell for file read/write operations
-- Use clarify when the request is genuinely ambiguous and a wrong guess would waste work; skip it for low-stakes defaults you can pick reasonably"""
+- Use clarify when the request is genuinely ambiguous and a wrong guess would waste work; skip it for low-stakes defaults you can pick reasonably
+- Use delegate for context-heavy, self-contained subtasks (big research, reading many files) whose raw output would flood your context; do small jobs yourself"""
 
 
 MEMORY_HINT = (
