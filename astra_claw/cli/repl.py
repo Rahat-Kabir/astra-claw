@@ -13,7 +13,8 @@ from prompt_toolkit.styles import Style
 from ..agent.events import AgentEvents
 from ..agent.title_generator import maybe_auto_title
 from ..constants import get_astraclaw_home
-from ..llm import format_route_label, resolve_api_key
+from ..config import save_user_config
+from ..llm import format_route_label, resolve_api_key, validate_credentials
 from ..session import (
     archive_session,
     create_session,
@@ -22,7 +23,7 @@ from ..session import (
     rewrite_session,
     save_message,
 )
-from .commands import resolve_command, AstraCompleter
+from .commands import resolve_command,parse_model_arg, AstraCompleter
 from .context_refs import expand_context_references
 from .history_edit import truncate_for_retry
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
@@ -183,6 +184,51 @@ def _run_loop(
                     heartbeat=cli_ui.get_heartbeat_snapshot(),
                 )
                 cli_ui.print_usage_panel(snapshot)
+
+            elif command.name == "/model":
+                parts = message.split(maxsplit=1)
+                arg = parts[1].strip() if len(parts) > 1 else ""
+
+                if not arg:
+                    cli_ui.print_model_info(
+                        current=format_route_label(getattr(agent, "primary_route", None)),
+                        fallback=format_route_label(getattr(agent, "fallback_route", None)),
+                    )
+                    continue
+
+                current_route = getattr(agent, "primary_route", None) or {}
+                try:
+                    provider, model = parse_model_arg(arg, current_route.get("provider", "openai"))
+                except ValueError:
+                    cli_ui.print_warning("Usage: /model openai:gpt-4o   (or just /model gpt-4o)")
+                    continue
+
+                api_key = resolve_api_key(provider, getattr(agent, "model_config", None) or {})
+                if not api_key:
+                    cli_ui.print_warning(
+                        f"No API key for '{provider}'. Run 'astraclaw setup key' first."
+                    )
+                    continue
+
+                cli_ui.start_thinking(f"validating {provider}")
+                ok, detail = validate_credentials(provider, api_key)
+                cli_ui.stop_thinking()
+                if not ok:
+                    cli_ui.print_warning(f"Could not switch to {provider}:{model} — {detail}")
+                    continue
+
+                try:
+                    agent.set_primary_route(provider, model)
+                    save_user_config({"model": {"provider": provider, "default": model}})
+                except Exception as exc:
+                    cli_ui.print_error(f"Switch failed: {exc}")
+                    continue
+
+                cli_ui.print_success(
+                    f"Model switched to {format_route_label(agent.primary_route)} (saved)."
+                )
+                continue
+
             elif command.name == "/retry":
                 truncated, user_text = truncate_for_retry(active_history)
                 if user_text is None:

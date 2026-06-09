@@ -399,6 +399,19 @@ Why: show the active primary route at REPL startup without opening config.
 - [x] `tests/cli/test_ui_banner.py` - formatter + banner coverage
 - [x] Verified: `python -m pytest tests/cli/test_ui_banner.py tests -q` -> 391 passed
 
+## v0.2.19 - /model Command (2026-06-09)
+
+Why: switch model from the REPL without editing config or restarting.
+
+### Completed
+
+- [x] `astra_claw/cli/commands.py` - `/model` command + pure `parse_model_arg()` (`provider:model` or bare `model`)
+- [x] `astra_claw/agent/loop.py` - `set_primary_route()` switches route in place and warms the client
+- [x] `astra_claw/cli/ui.py` - `print_model_info()` for bare `/model`
+- [x] `astra_claw/cli/repl.py` - `/model` branch: validate key (fail fast), switch live, persist via `save_user_config`
+- [x] `tests/cli/test_model_command.py` + updated `test_commands.py`
+- [x] Verified: `python -m pytest -q` -> 399 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

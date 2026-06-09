@@ -120,6 +120,7 @@ agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_to
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/context_refs.py (imports constants, session, tools.path_safety)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
+cli/history_edit.py (pure helpers; no Rich or prompt_toolkit)
 cli/usage.py       (pure helpers; no Rich or prompt_toolkit)
 cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display, cli.usage)
 __main__.py        (imports loop + cli + session)
@@ -146,6 +147,8 @@ __main__.py        (imports loop + cli + session)
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.
 - `/usage` is a local CLI command that shows estimated context budget, compaction threshold/headroom, memory char usage, and last-turn heartbeat stats without calling the LLM.
+- `/retry` is a local CLI command that truncates the last user turn from memory and JSONL, then re-runs the same user prompt through the normal agent loop.
+- `/model` is a local CLI command: bare `/model` shows the active route, `/model provider:model` (or bare `model`, keeping the current provider) validates the key, calls `agent.set_primary_route()` to switch in place (no restart), and persists via `save_user_config`. Parsing lives in `cli/commands.py::parse_model_arg`.
 - `cli.render_markdown` in config toggles Rich Markdown rendering for assistant replies after each turn (default off). When off, tokens stream live as plain text; when on, the CLI buffers during the turn and prints formatted output via `CliUI.finish_assistant_response()`. Session JSONL keeps raw assistant text.
 - Memory lives in `~/.astraclaw/memory/` (`MEMORY.md` + `USER.md`), entries delimited by `§`, char-limited.
 - The `memory` tool is special-cased in `agent/loop.py` so the agent's `MemoryStore` is passed to the handler; the registry contract stays uniform (standalone dispatch returns an unavailable-error JSON).

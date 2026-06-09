@@ -95,6 +95,25 @@ class AstraAgent:
             self._clients[provider] = create_client(provider, api_key=api_key)
         return self._clients[provider]
 
+    def set_primary_route(self, provider: str, model: str) -> None:
+        """Switch the active model in place (no restart).
+
+        Updates the in-memory model config + primary route, drops a now-redundant
+        fallback, and warms the client so a missing key fails here, not mid-turn.
+        """
+        provider = (provider or "").strip()
+        model = (model or "").strip()
+        if not provider or not model:
+            raise ValueError("provider and model are both required")
+
+        self._model_config["provider"] = provider
+        self._model_config["default"] = model
+        self.model_config = self._model_config
+        self.primary_route = {"provider": provider, "model": model}
+        if self.fallback_route == self.primary_route:
+            self.fallback_route = None
+        self._get_client(provider)  # builds + caches; raises if no key
+
     def _run_one_stream(
         self,
         messages: List[Dict[str, Any]],

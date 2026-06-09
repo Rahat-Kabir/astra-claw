@@ -134,6 +134,15 @@ class CliUI:
     def print_success(self, message: str) -> None:
         self.console.print(f"[green]{message}[/green]")
 
+    def print_model_info(self, current: str, fallback: str = "") -> None:
+        """Show the active model (and optional fallback) for bare /model."""
+        self.console.print(f"[bold cyan]Model[/bold cyan]    {current or '—'}")
+        if fallback:
+            self.console.print(f"[dim]Fallback[/dim] {fallback}")
+        self.console.print(
+            "[dim]Switch with: /model openai:gpt-4o   (or just /model gpt-4o)[/dim]"
+        )
+
     def print_compaction_result(
         self,
         *,

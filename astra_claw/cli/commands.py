@@ -23,6 +23,7 @@ COMMANDS: tuple[CommandDef, ...] = (
     CommandDef("/new", "Start a new session"),
     CommandDef("/compact", "Compact older session context"),
     CommandDef("/usage", "Show context, compaction, and memory usage"),
+    CommandDef("/model", "Show or switch the active model"),
     CommandDef("/retry", "Redo the last turn with the same prompt"),
     CommandDef("/skills", "List installed skills"),
     CommandDef("/skill", "Invoke a skill for one turn"),
@@ -47,6 +48,24 @@ def resolve_command(text: str) -> Optional[CommandDef]:
     """Return the slash command for the first token in text, if any."""
     command_name = text.strip().split(maxsplit=1)[0].lower() if text.strip() else ""
     return _COMMAND_BY_NAME.get(command_name)
+
+def parse_model_arg(arg: str, current_provider: str) -> tuple[str, str]:
+    """Parse a /model argument into (provider, model).
+
+    'openai:gpt-4o' -> ('openai', 'gpt-4o')
+    'gpt-4o'        -> (current_provider, 'gpt-4o')
+    Raises ValueError on empty or malformed input.
+    """
+    arg = (arg or "").strip()
+    if not arg:
+        raise ValueError("empty model argument")
+    if ":" in arg:
+        provider, _, model = arg.partition(":")
+        provider, model = provider.strip(), model.strip()
+        if not provider or not model:
+            raise ValueError("use 'provider:model' or just 'model'")
+        return provider, model
+    return (current_provider or "openai").strip(), arg
 
 
 class SlashCommandCompleter(Completer):

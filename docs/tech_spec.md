@@ -130,12 +130,13 @@ Final Response
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling
 - Rich is used for light output: startup banner (session id, primary `provider:model` route, optional title/workspace/resume stats), help, session table, warnings, errors, and the live feedback spinner
-- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/retry`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; skill aliases (`/<skill-name>`) and `/skill` rewrite the prompt before the LLM call, and the others are not sent to the LLM
+- Slash commands (`/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/model`, `/retry`, `/skills`, `/skill`, `/exit`, `/quit`) are handled locally; skill aliases (`/<skill-name>`) and `/skill` rewrite the prompt before the LLM call, and the others are not sent to the LLM
 - `agent/loop.py` exposes an optional `stream_writer(token)` callback so the CLI owns token rendering
 - When no callback is provided, the agent keeps the old stdout streaming behavior
 - `/compact` runs manual compaction, archives the current session, rewrites the transcript, and replaces the REPL's active replay history
 - `/usage` builds a local context panel from the current replay history: estimated next-request tokens (system + tool schemas + history), compaction threshold/headroom, session compaction count, memory char limits, and last-turn heartbeat stats. Estimates reuse the compactor's char/4 heuristic; no provider billing data and no LLM call
 - `/retry` uses `cli/history_edit.py` to find the last user message, drop that turn from `active_history`, archive + rewrite the session JSONL, then fall through to a normal agent turn with the same user text (including any tool messages from that turn)
+- `/model` switches the active model without a restart: `cli/commands.py::parse_model_arg` parses `provider:model` or a bare `model` (keeping the current provider), the REPL validates the resolved key via `llm.validate_credentials` (fail fast), then `agent.set_primary_route()` updates `primary_route` + in-memory model config and warms the per-provider client, and `save_user_config` persists `model.provider`/`model.default`. Bare `/model` prints the current route via `ui.print_model_info`
 
 ### Usage Panel
 
