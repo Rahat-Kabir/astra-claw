@@ -23,7 +23,8 @@ from ..session import (
     rewrite_session,
     save_message,
 )
-from .commands import resolve_command,parse_model_arg, AstraCompleter
+from ..tools.path_safety import set_write_approval_callback
+from .commands import resolve_command, parse_model_arg, AstraCompleter
 from .context_refs import expand_context_references
 from .history_edit import truncate_for_retry
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
@@ -80,6 +81,11 @@ def run_interactive_repl(
         model=model_label or None,
     )
 
+    if _confirm_edits_enabled(agent):
+        set_write_approval_callback(_build_write_approval_callback(cli_ui, prompt))
+    else:
+        set_write_approval_callback(None)
+
     try:
         _run_loop(
             agent=agent,
@@ -97,6 +103,7 @@ def run_interactive_repl(
             patch_stdout_enabled=patch_stdout_enabled,
         )
     finally:
+        set_write_approval_callback(None)
         _join_title_threads(pending_title_threads, cli_ui)
 
 
@@ -338,6 +345,43 @@ def _render_markdown_enabled(agent) -> bool:
     config = getattr(agent, "config", {}) or {}
     cli_cfg = config.get("cli") or {}
     return bool(cli_cfg.get("render_markdown", False))
+
+
+def _confirm_edits_enabled(agent) -> bool:
+    config = getattr(agent, "config", {}) or {}
+    cli_cfg = config.get("cli") or {}
+    return bool(cli_cfg.get("confirm_edits", True))
+
+
+def _build_write_approval_callback(
+    cli_ui: CliUI,
+    prompt_session: Any,
+) -> Callable[[str, str, str], bool]:
+    """Return a callback that previews a diff and reads an apply/skip/always answer.
+
+    "y" applies once, "n" rejects, "a" applies and stops asking for the rest of
+    the session. The session-wide "always" latch lives in this closure so the
+    tool side stays a simple bool.
+    """
+    state = {"always": False}
+
+    def _approve(path: str, diff: str, action: str) -> bool:
+        if state["always"]:
+            return True
+        cli_ui.stop_thinking()
+        cli_ui.print_diff(path, diff)
+        try:
+            answer = prompt_session.prompt(
+                [("class:prompt", f"apply {action}? [y/n/a] ")]
+            ).strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            return False
+        if answer == "a":
+            state["always"] = True
+            return True
+        return answer in ("y", "yes")
+
+    return _approve
 
 
 def _build_agent_events(cli_ui: CliUI) -> AgentEvents:

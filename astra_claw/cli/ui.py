@@ -143,6 +143,29 @@ class CliUI:
             "[dim]Switch with: /model openai:gpt-4o   (or just /model gpt-4o)[/dim]"
         )
 
+    def print_diff(self, path: str, diff: str, max_lines: int = 60) -> None:
+        """Render a unified diff with colored +/- lines, capped for display."""
+        self.console.print(f"[bold]Proposed edit[/bold] [cyan]{escape(path)}[/cyan]")
+        if not diff.strip():
+            self.console.print("[dim](no textual changes)[/dim]")
+            return
+
+        lines = diff.splitlines()
+        shown = lines[:max_lines]
+        for line in shown:
+            if line.startswith("+++") or line.startswith("---"):
+                self.console.print(f"[dim]{escape(line)}[/dim]")
+            elif line.startswith("@@"):
+                self.console.print(f"[cyan]{escape(line)}[/cyan]")
+            elif line.startswith("+"):
+                self.console.print(f"[green]{escape(line)}[/green]")
+            elif line.startswith("-"):
+                self.console.print(f"[red]{escape(line)}[/red]")
+            else:
+                self.console.print(f"[dim]{escape(line)}[/dim]")
+        if len(lines) > max_lines:
+            self.console.print(f"[dim]… {len(lines) - max_lines} more lines[/dim]")
+
     def print_compaction_result(
         self,
         *,

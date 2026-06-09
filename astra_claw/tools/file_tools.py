@@ -3,7 +3,13 @@
 import json
 from pathlib import Path
 
-from .path_safety import atomic_write_text, inside_workspace_fence, is_write_blocked
+from .path_safety import (
+    atomic_write_text,
+    inside_workspace_fence,
+    is_write_blocked,
+    request_write_approval,
+    unified_diff,
+)
 from .registry import registry
 
 
@@ -51,6 +57,20 @@ def write_file(args: dict) -> str:
     # Safety check
     if is_write_blocked(filepath):
         return json.dumps({"error": f"Write denied: '{path}' is a protected path"})
+
+    old_content = ""
+    if filepath.exists() and filepath.is_file():
+        try:
+            old_content = filepath.read_text(encoding="utf-8")
+        except Exception:
+            old_content = ""
+    diff = unified_diff(old_content, content, str(filepath))
+
+    if not request_write_approval(str(filepath), diff, "write"):
+        return json.dumps(
+            {"status": "rejected_by_user", "path": str(filepath)},
+            ensure_ascii=False,
+        )
 
     try:
         bytes_written = atomic_write_text(filepath, content)

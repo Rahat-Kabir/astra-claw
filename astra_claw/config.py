@@ -50,6 +50,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "cli": {
         "render_markdown": False,
+        "confirm_edits": True,
     },
 }
 

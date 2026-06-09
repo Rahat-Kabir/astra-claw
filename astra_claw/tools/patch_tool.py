@@ -1,23 +1,16 @@
 """Patch tool - targeted exact text replacement for existing files."""
 
-import difflib
 import json
 from pathlib import Path
 
-from .path_safety import atomic_write_text, inside_workspace_fence, is_write_blocked
+from .path_safety import (
+    atomic_write_text,
+    inside_workspace_fence,
+    is_write_blocked,
+    request_write_approval,
+    unified_diff,
+)
 from .registry import registry
-
-
-def _unified_diff(old_content: str, new_content: str, path: str) -> str:
-    """Return a unified diff for a file content change."""
-    return "".join(
-        difflib.unified_diff(
-            old_content.splitlines(keepends=True),
-            new_content.splitlines(keepends=True),
-            fromfile=f"a/{path}",
-            tofile=f"b/{path}",
-        )
-    )
 
 
 def patch_file(args: dict) -> str:
@@ -70,7 +63,13 @@ def patch_file(args: dict) -> str:
 
     replacements = match_count if replace_all else 1
     new_content = old_content.replace(old_text, new_text, replacements)
-    diff = _unified_diff(old_content, new_content, path)
+    diff = unified_diff(old_content, new_content, path)
+
+    if not request_write_approval(str(filepath), diff, "patch"):
+        return json.dumps(
+            {"status": "rejected_by_user", "path": str(filepath)},
+            ensure_ascii=False,
+        )
 
     try:
         bytes_written = atomic_write_text(filepath, new_content)

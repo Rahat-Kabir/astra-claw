@@ -412,6 +412,21 @@ Why: switch model from the REPL without editing config or restarting.
 - [x] `tests/cli/test_model_command.py` + updated `test_commands.py`
 - [x] Verified: `python -m pytest -q` -> 399 passed
 
+## v0.2.20 - Preview-and-Approve Edits (2026-06-09)
+
+Why: let the user see a diff and approve/reject before file edits hit disk.
+
+### Completed
+
+- [x] `astra_claw/tools/path_safety.py` - shared `unified_diff()` + module-level write-approval callback (`set_write_approval_callback` / `request_write_approval`); no callback registered = allow (one-shot/tests unaffected)
+- [x] `astra_claw/tools/file_tools.py` + `patch_tool.py` - build a diff and gate on approval before writing; rejection returns `{"status": "rejected_by_user"}` so the model can re-plan
+- [x] `astra_claw/cli/ui.py` - `print_diff()` colored +/- renderer with line cap
+- [x] `astra_claw/cli/repl.py` - `_build_write_approval_callback` (y/n/a, session-wide "always" latch) registered when `cli.confirm_edits` is true; cleared on exit
+- [x] `astra_claw/config.py` - `cli.confirm_edits` default True
+- [x] `unified_diff()` normalizes trailing newlines on both sides so a file whose last line lacks `\n` can't merge a `-`/`+` pair onto one mis-colored row (display-only; bytes written are unchanged)
+- [x] `tests/tools/test_write_approval.py` (incl. no-trailing-newline diff regression)
+- [x] Verified: `python -m pytest -q` -> 408 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.
