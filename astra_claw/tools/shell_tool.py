@@ -28,13 +28,79 @@ DANGEROUS_PATTERNS = [
     (r"\bfind\b.*-exec\s+.*rm\b", "find -exec rm"),
 ]
 
+_COMMAND_START = r"(?:^|[;&|]\s*)"
+_EXECUTABLE_PREFIX = r'(?:"[^"]+"|\'[^\']+\'|[^\s;&|]+[\\/])?'
 
-def _detect_dangerous(command: str) -> Optional[str]:
-    """Check if a command matches any dangerous pattern.
+PACKAGE_MUTATION_PATTERNS = [
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"pip(?:3)?(?:\.exe)?\s+install\b",
+        "installs Python packages",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"(?:python|python3|py)(?:\.exe)?\s+-m\s+pip\s+install\b",
+        "installs Python packages",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"uv(?:\.exe)?\s+pip\s+install\b",
+        "installs Python packages",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"uv(?:\.exe)?\s+run\b[^;&|]*\s--with(?:-requirements)?\b",
+        "downloads and runs Python packages",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"uv(?:\.exe)?\s+tool\s+install\b",
+        "installs Python tools",
+    ),
+    (
+        _COMMAND_START + _EXECUTABLE_PREFIX + r"uvx(?:\.exe)?\b",
+        "downloads and runs a Python tool",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"(?:npm|pnpm|yarn|bun)(?:\.cmd|\.exe)?\s+(?:install|add|ci)\b",
+        "installs JavaScript packages",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"(?:npx|bunx)(?:\.cmd|\.exe)?\b",
+        "downloads and runs a JavaScript package",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"pnpm(?:\.cmd|\.exe)?\s+dlx\b",
+        "downloads and runs a JavaScript package",
+    ),
+    (
+        _COMMAND_START
+        + _EXECUTABLE_PREFIX
+        + r"(?:winget|choco|scoop)(?:\.exe|\.cmd)?\s+install\b",
+        "installs system packages",
+    ),
+]
 
-    Returns the reason string if dangerous, None if safe.
+
+def classify_command_risk(command: str) -> Optional[str]:
+    """Return the approval reason for a risky shell command, if any.
+
+    Destructive patterns may occur anywhere in the command. Package mutation
+    patterns are anchored to command boundaries so quoted prose such as a Git
+    commit message mentioning ``pip install`` is not treated as an installer.
     """
-    for pattern, reason in DANGEROUS_PATTERNS:
+    for pattern, reason in [*DANGEROUS_PATTERNS, *PACKAGE_MUTATION_PATTERNS]:
         if re.search(pattern, command, re.IGNORECASE):
             return reason
     return None
@@ -47,7 +113,9 @@ def _detect_dangerous(command: str) -> Optional[str]:
 _approval_callback: Optional[Callable[[str, str], bool]] = None
 
 
-def set_approval_callback(callback: Callable[[str, str], bool]) -> None:
+def set_approval_callback(
+    callback: Optional[Callable[[str, str], bool]],
+) -> None:
     """Register a callback for dangerous command approval.
 
     The callback receives (command, reason) and returns True to allow,
@@ -70,7 +138,7 @@ def run_command(args: dict) -> str:
         return json.dumps({"error": "No command provided"})
 
     # Safety check
-    danger_reason = _detect_dangerous(command)
+    danger_reason = classify_command_risk(command)
     if danger_reason:
         if _approval_callback:
             allowed = _approval_callback(command, danger_reason)

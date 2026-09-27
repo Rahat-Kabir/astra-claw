@@ -453,6 +453,19 @@ Why: open the delegation chapter - let a parent agent hand a context-heavy, self
 - Context budget allocation between parent and children - the child reuses the parent's compaction config for free; revisit only if needed
 - Parallel / batch children - sequential single-child only; threading is unsafe against JSONL writes + Rich UI
 
+## v0.3.1 - Package Installation Approval (2026-09-28)
+
+Why: dogfooding found that package downloads and environment mutations could bypass the shell approval gate, including `uv run --with` and `uv pip install`.
+
+### Completed
+
+- [x] `astra_claw/tools/shell_tool.py` - added pure `classify_command_risk()` classification before subprocess execution
+- [x] Added approval coverage for Python, JavaScript, and Windows system package installers plus download-and-run commands such as `uvx`, `npx`, and `pnpm dlx`
+- [x] Anchored package mutation patterns to shell-command boundaries so quoted prose such as a Git commit message mentioning `pip install` remains ungated
+- [x] `tests/tools/test_shell_tool.py` - added installer matrix, safe-command passthrough, approval-reason, and denial-before-subprocess regressions
+- [x] Verified focused suite: `.\venv\Scripts\python.exe -m pytest tests\tools\test_shell_tool.py -q` -> 31 passed
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest tests -q` -> 448 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

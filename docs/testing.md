@@ -60,7 +60,8 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 - `tests/cli/test_ui_markdown.py`: Markdown buffer/finish behavior and plain-stream trailing newline
 - `tests/cli/`: slash command, completion, skill discovery/invocation, context-reference expansion and fuzzy completion, REPL routing, `/usage` snapshot tests, Markdown rendering tests, and tool-display preview/summary tests
 - `tests/test_session.py`: JSONL session persistence and JSONL session-search tests
-- `tests/tools/`: tool-level tests for file, patch, shell, search, web, memory, skills, and session-search behavior
+- `tests/tools/test_shell_tool.py`: shell execution plus destructive/package-mutation risk classification, approval reasons, denial-before-subprocess, and safe-command passthrough
+- `tests/tools/`: remaining tool-level tests for file, patch, search, web, memory, skills, and session-search behavior
 - `tests/agent/`: mocked agent loop tests without real provider calls
 
 ## Notes

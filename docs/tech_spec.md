@@ -122,8 +122,10 @@ Final Response
 ### Shell Tool Safety
 
 - Regex patterns detect dangerous commands such as recursive delete, `mkfs`, `dd`, SQL `DROP`, and `curl|sh`
+- `classify_command_risk()` combines those destructive checks with command-boundary-anchored package mutation checks for Python (`pip install`, `python -m pip install`, `uv pip install`, `uv run --with`, `uv tool install`, `uvx`), JavaScript (`npm`/`pnpm`/`yarn`/`bun` installs plus `npx`/`bunx`/`pnpm dlx`), and Windows system installers (`winget`, `choco`, `scoop`)
 - `set_approval_callback()` lets `__main__.py` inject an interactive approval prompt
 - Without a callback, dangerous commands are blocked
+- Rejected package mutations never reach `subprocess.run`; ordinary commands such as `uv run pytest` and `npm test` remain ungated
 - The Windows shell hint now reflects `subprocess.run(..., shell=True)` behavior more precisely: Windows commands should remain `cmd`-compatible
 
 ### CLI/TUI Layer

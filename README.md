@@ -37,7 +37,7 @@ It is not designed as:
 - Conversational AI agent with a tool-calling loop
 - Light Rich/prompt_toolkit CLI with history, slash commands, and autocomplete; startup banner shows the active `provider:model` route
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
-- Runs shell commands via `shell` with dangerous-command approval
+- Runs shell commands via `shell` with approval for destructive commands and package/environment mutations such as `pip install`, `uv run --with`, and `npm install`
 - Searches files via `search_files` for content or filenames
 - Expands inline context references (`@file:`, `@folder:`, `@diff`, `@session:`) before agent turns, with fuzzy tab completion for file/folder/session picks in the REPL
 - Searches the web via `web_search` and extracts pages via `web_extract` (Tavily-backed, hidden unless `TAVILY_API_KEY` is set)
@@ -68,7 +68,7 @@ Astra-Claw is a local developer tool, not a secure sandbox.
 
 Important boundaries:
 - `shell` is powerful and can run arbitrary terminal commands
-- dangerous shell commands require explicit user approval
+- destructive shell commands and package/environment mutations require explicit user approval
 - `--workspace <path>` fences `write_file` and `patch` to a single directory tree
 - `read_file` and `shell` are not fenced by `--workspace`
 - web tools are optional and only appear when `TAVILY_API_KEY` is set
