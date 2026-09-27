@@ -18,8 +18,8 @@ Treat this file like `CLAUDE.md`: it is the project guide for assistant behavior
 
 ## Global (Docs)
 
-- AGENTS.md is the source of truth. CLAUDE.md must stay byte-identical.
-  Any edit to AGENTS.md must be mirrored to CLAUDE.md in the same change.
+- AGENTS.md is the source of truth. CLAUDE.md should contain only `@AGENTS.md`
+  so both assistants follow the same project instructions without duplication.
 
 - After adding a new file, tool, or feature, update `README.md` and the Project Structure section in this file to reflect the change.
 - After code, update `docs/tech_spec.md` and `docs/progress.md` with the decisions made in the session shortly also `docs/testing.md` if any.
