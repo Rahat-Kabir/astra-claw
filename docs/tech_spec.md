@@ -203,6 +203,13 @@ Final Response
 - `cli/ui.py` owns a heartbeat spinner: `start_thinking(label)` starts or resumes preserving counters, `pause_thinking()` hides it without resetting state so streamed tokens print cleanly, `stop_thinking()` fully resets at turn end. The render shows `<label> · <N> tools · <elapsed> · ~<tokens> tok`, with a 0.5s daemon-thread tick so elapsed time advances during silent gaps. `bump_tool()`, `bump_tokens(n)`, and `set_heartbeat_label(label)` mutate counters between events. `print_tool_line(name, preview, summary)` renders one compact dim line per completed tool; errors show in red, no emoji. Assistant replies finish through `begin_assistant_response()` / `stream_token()` / `finish_assistant_response()` (plain stream or Rich Markdown when `cli.render_markdown` is enabled)
 - `cli/repl.py` builds an `AgentEvents` per turn: `on_thinking(True)` starts the heartbeat, `on_thinking(False)` pauses it during streaming, `on_tool_start` resumes with `running <tool> <preview>`, `on_tool_complete` pauses, bumps the tool counter, and prints the tool line. The `stream_writer` is wrapped to call `bump_tokens(len(token) // 4)` for a rough live token estimate. `run_conversation` is wrapped in `try/finally` so `stop_thinking()` always runs at turn end, then `finish_assistant_response(response)` renders the assistant block
 
+### Queued Follow-up Messages
+
+- Interactive turns run through `asyncio.to_thread(_execute_agent_turn, ...)`, leaving the main prompt_toolkit event loop free to await `PromptSession.prompt_async()` at `follow-up>`.
+- `cli/followup.py::FollowUpQueue` stores submitted text in thread-safe FIFO order. After the current turn is rendered and persisted, the REPL pops one message, passes the completed history into the next `run_conversation()` call, and continues collecting more follow-ups.
+- `PromptBroker` bridges synchronous worker callbacks back to the main input loop. A write approval or `clarify` question cancels the active follow-up prompt, receives exclusive terminal input, resolves the worker's `Future`, and then restores any partially typed follow-up draft.
+- Slash commands are rejected while a turn is running; they remain local idle-REPL operations. Follow-ups do not interrupt an in-flight model stream or tool batch - that separate behavior is steering and remains out of scope.
+
 ### Memory System
 
 - Storage: `~/.astraclaw/memory/MEMORY.md` (agent notes) and `USER.md` (user profile)
@@ -231,9 +238,9 @@ Final Response
 
 - Thin shell: `astra_claw/tools/clarify_tool.py` validates the question + choices (max 4, blanks filtered) and delegates to a platform-provided `callback(question, choices) -> str`. The tool itself never touches UI code.
 - Same special-case pattern as `memory` / `todo`: `agent/tool_runner.py` routes `fn_name == "clarify"` and injects `clarify_callback` from `run_conversation`. Standalone `registry.dispatch("clarify", ...)` returns an "unavailable" error JSON so non-interactive callers get a clean failure instead of hanging.
-- CLI callback lives in `cli/repl.py::_build_clarify_callback`: stops the thinking spinner, renders the question via `cli_ui.print_clarify_question`, reads one line from the existing `PromptSession`. Numeric input in range resolves to the matching choice text; anything else (including the implicit "Other" option) is returned verbatim. `KeyboardInterrupt` / `EOFError` return an empty string so the agent can continue.
+- CLI callback lives in `cli/repl.py::_build_clarify_callback`: stops the thinking spinner, renders the question via `cli_ui.print_clarify_question`, and reads one line from the existing `PromptSession`. During a background turn, `PromptBroker` gives the question exclusive access to that prompt. Numeric input in range resolves to the matching choice text; anything else (including the implicit "Other" option) is returned verbatim. `KeyboardInterrupt` / `EOFError` return an empty string so the agent can continue.
 - Toolset `clarify` (can be disabled via `tools.enabled_toolsets`).
-- Out of scope for v1: arrow-key navigation, timeout / auto-proceed, non-CLI gateway wiring. The CLI-only assumption lets us block on `input()` without threads or queues.
+- Out of scope for v1: arrow-key navigation, timeout / auto-proceed, and non-CLI gateway wiring.
 
 ### Delegation / Sub-agents
 

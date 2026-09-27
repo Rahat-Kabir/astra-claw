@@ -1,4 +1,6 @@
 from io import StringIO
+import asyncio
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -28,6 +30,44 @@ class FakePromptSession:
         if isinstance(next_prompt, BaseException):
             raise next_prompt
         return next_prompt
+
+
+def _prompt_text(message):
+    if isinstance(message, list):
+        return "".join(part[1] for part in message)
+    return str(message)
+
+
+class AsyncFollowUpPromptSession(FakePromptSession):
+    def __init__(self, prompts, *, started, release):
+        super().__init__(prompts)
+        self.started = started
+        self.release = release
+        self.followup_sent = False
+
+    async def prompt_async(self, message, **kwargs):
+        text = _prompt_text(message)
+        if text.startswith("follow-up>") and not self.followup_sent:
+            while not self.started.is_set():
+                await asyncio.sleep(0.001)
+            self.followup_sent = True
+            self.release.set()
+            return "run the tests too"
+        await asyncio.Future()
+
+
+class AsyncApprovalPromptSession(FakePromptSession):
+    async def prompt_async(self, message, **kwargs):
+        if _prompt_text(message).startswith("apply write?"):
+            return "y"
+        await asyncio.Future()
+
+
+class AsyncClarifyPromptSession(FakePromptSession):
+    async def prompt_async(self, message, **kwargs):
+        if _prompt_text(message).startswith("answer>"):
+            return "1"
+        await asyncio.Future()
 
 
 class FakeAgent:
@@ -94,6 +134,38 @@ class FakeAgent:
         )
 
 
+class BlockingFirstAgent(FakeAgent):
+    def __init__(self, started, release):
+        super().__init__()
+        self.started = started
+        self.release = release
+
+    def run_conversation(self, *args, **kwargs):
+        if not self.calls:
+            self.started.set()
+            assert self.release.wait(timeout=2)
+        return super().run_conversation(*args, **kwargs)
+
+
+class ApprovalAgent(FakeAgent):
+    def run_conversation(self, *args, **kwargs):
+        from astra_claw.tools.path_safety import request_write_approval
+
+        assert request_write_approval("note.txt", "diff", "write") is True
+        return super().run_conversation(*args, **kwargs)
+
+
+class ClarifyAgent(FakeAgent):
+    def __init__(self):
+        super().__init__()
+        self.answer = None
+
+    def run_conversation(self, *args, **kwargs):
+        clarify_callback = kwargs.get("clarify_callback")
+        self.answer = clarify_callback("Choose one", ["first", "second"])
+        return super().run_conversation(*args, **kwargs)
+
+
 def _ui_and_output():
     output = StringIO()
     console = Console(file=output, force_terminal=False, width=100)
@@ -123,6 +195,77 @@ def test_normal_prompt_calls_agent_with_stream_writer_and_saves_messages():
         ("session-1", {"role": "assistant", "content": "assistant response"}),
     ]
     assert "assistant response" in output.getvalue()
+
+
+def test_followup_is_queued_while_agent_runs_then_processed():
+    started = threading.Event()
+    release = threading.Event()
+    agent = BlockingFirstAgent(started, release)
+    prompt = AsyncFollowUpPromptSession(
+        ["start the task", "/exit"],
+        started=started,
+        release=release,
+    )
+    saved = []
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=prompt,
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert [call["message"] for call in agent.calls] == [
+        "start the task",
+        "run the tests too",
+    ]
+    assert agent.calls[1]["history"] == [message for _, message in saved[:2]]
+    assert [message["content"] for _, message in saved] == [
+        "start the task",
+        "assistant response",
+        "run the tests too",
+        "assistant response",
+    ]
+    assert "Queued follow-up (1)." in output.getvalue()
+    assert "Running queued follow-up." in output.getvalue()
+
+
+def test_followup_prompt_yields_to_write_approval():
+    agent = ApprovalAgent()
+    prompt = AsyncApprovalPromptSession(["edit the file", "/exit"])
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=prompt,
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert len(agent.calls) == 1
+    assert "assistant response" in output.getvalue()
+
+
+def test_followup_prompt_yields_to_clarify_question():
+    agent = ClarifyAgent()
+    prompt = AsyncClarifyPromptSession(["start", "/exit"])
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=prompt,
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.answer == "first"
+    assert len(agent.calls) == 1
+    assert "Choose one" in output.getvalue()
 
 
 def test_prompt_context_refs_are_expanded_before_agent_call(tmp_path, monkeypatch):

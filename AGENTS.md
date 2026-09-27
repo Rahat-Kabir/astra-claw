@@ -57,7 +57,8 @@ astra-claw/
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion before agent turns
 |   |   |-- context_completion.py # fuzzy tab completion for context refs in the REPL
 |   |   |-- image_attachments.py # ordinary image-path discovery + base64 multimodal content
-|   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
+|   |   |-- followup.py       # FIFO follow-up queue + worker-to-REPL prompt broker
+|   |   |-- repl.py           # prompt_toolkit loop + AgentEvents + queued follow-up orchestration
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- skills.py         # lightweight SKILL.md discovery + one-turn invocation helpers
 |   |   |-- tool_display.py   # pure preview + result-summary helpers (no Rich deps)
@@ -125,7 +126,8 @@ cli/image_attachments.py (imports tools.path_safety)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
 cli/history_edit.py (pure helpers; no Rich or prompt_toolkit)
 cli/usage.py       (pure helpers; no Rich or prompt_toolkit)
-cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.tool_display, cli.usage)
+cli/followup.py    (stdlib asyncio/thread-safe queues only)
+cli/*.py           (imports constants, session, Rich, prompt_toolkit, agent.events, cli.context_refs, cli.followup, cli.tool_display, cli.usage)
 __main__.py        (imports loop + cli + session)
 ```
 
@@ -147,6 +149,7 @@ __main__.py        (imports loop + cli + session)
 - CLI tool-call feedback logic belongs in `cli/tool_display.py` (pure) and `cli/ui.py` (Rich); do not print tool previews or summaries from inside the agent loop.
 - Context reference expansion belongs in `cli/context_refs.py` and runs before user text reaches `run_conversation()`. Supported refs are `@file:`, `@folder:`, `@diff`, and `@session:`; keep expansion bounded and block sensitive paths. REPL tab completion lives in `cli/context_completion.py` with fuzzy file/folder search and session title matching.
 - Native image attachment preparation belongs in `cli/image_attachments.py`: detect PNG/JPEG/GIF/WebP by signature, discover only paths explicitly present in the user's text, block sensitive/oversized files, and return OpenAI-compatible text + `image_url` content blocks. Interactive folders with multiple images must ask which image; non-interactive ambiguity must warn and attach none. Multimodal content is persisted in JSONL, and search/compaction must never treat base64 as searchable text or ordinary token text.
+- Queued follow-ups belong in `cli/followup.py` + `cli/repl.py`: `run_conversation()` runs through `asyncio.to_thread` while `PromptSession.prompt_async()` accepts FIFO follow-ups. Slash commands are rejected while busy. `PromptBroker` must serialize write approvals and `clarify` questions onto the main prompt so prompt_toolkit is never read concurrently; preserve partially typed follow-up text when temporarily switching prompts or returning idle.
 - Lightweight skills live under `~/.astraclaw/skills/**/SKILL.md`. `cli/skills.py` discovers metadata, `/skills` lists installed skills, `/<skill-name> [request]` or `/skill <name> <request>` injects full skill content for one turn, `tools/skills_tool.py` exposes agent-driven `list`/`view`, and `prompt_builder.py` only adds the compact skill index.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.

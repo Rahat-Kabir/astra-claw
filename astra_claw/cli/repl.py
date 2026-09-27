@@ -1,5 +1,6 @@
 """Interactive prompt loop for Astra-Claw."""
 
+import asyncio
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from ..session import (
 from ..tools.path_safety import clear_undo, set_write_approval_callback, undo_last_write
 from .commands import resolve_command, parse_model_arg, AstraCompleter
 from .context_refs import expand_context_references
+from .followup import FollowUpQueue, PromptBroker
 from .history_edit import truncate_for_retry
 from .image_attachments import prepare_image_prompt
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
@@ -69,6 +71,7 @@ def run_interactive_repl(
     prompt = prompt_session or build_prompt_session()
     cli_ui = ui or CliUI()
     pending_title_threads: list = []
+    write_approval_state = {"always": False}
 
     resumed_title = (
         load_session_meta_fn(active_session_id).get("title") if resumed else None
@@ -85,7 +88,13 @@ def run_interactive_repl(
 
     clear_undo()
     if _confirm_edits_enabled(agent):
-        set_write_approval_callback(_build_write_approval_callback(cli_ui, prompt))
+        set_write_approval_callback(
+            _build_write_approval_callback(
+                cli_ui,
+                prompt,
+                state=write_approval_state,
+            )
+        )
     else:
         set_write_approval_callback(None)
 
@@ -104,6 +113,7 @@ def run_interactive_repl(
             archive_session_fn=archive_session_fn,
             load_session_meta_fn=load_session_meta_fn,
             patch_stdout_enabled=patch_stdout_enabled,
+            write_approval_state=write_approval_state,
         )
     finally:
         set_write_approval_callback(None)
@@ -152,12 +162,18 @@ def _run_loop(
     archive_session_fn,
     load_session_meta_fn,
     patch_stdout_enabled,
+    write_approval_state,
 ):
+    prompt_default = ""
     while True:
         try:
             stdout_context = patch_stdout() if patch_stdout_enabled else nullcontext()
             with stdout_context:
-                message = prompt.prompt([("class:prompt", "astra> ")]).strip()
+                message = prompt.prompt(
+                    [("class:prompt", "astra> ")],
+                    default=prompt_default,
+                ).strip()
+            prompt_default = ""
         except (KeyboardInterrupt, EOFError):
             cli_ui.newline()
             cli_ui.print_success("Bye.")
@@ -338,77 +354,357 @@ def _run_loop(
                     cli_ui.print_warning(str(exc))
                     continue
 
-        events = _build_agent_events(cli_ui)
-        clarify_callback = _build_clarify_callback(cli_ui, prompt)
-        if isinstance(message, str):
-            expanded_message = expand_context_references(
-                message,
-                current_session_id=active_session_id,
-            )
-            prepared_prompt = prepare_image_prompt(
-                message,
-                text_for_model=expanded_message,
-                selector=clarify_callback,
-            )
-            for warning in prepared_prompt.warnings:
-                cli_ui.print_warning(warning)
-            user_content = prepared_prompt.content
-            title_user_message = message
+        if hasattr(prompt, "prompt_async"):
+            stdout_context = patch_stdout() if patch_stdout_enabled else nullcontext()
+            with stdout_context:
+                prompt_default = asyncio.run(
+                    _run_turns_with_followups(
+                        initial_message=message,
+                        agent=agent,
+                        active_session_id=active_session_id,
+                        active_history=active_history,
+                        prompt=prompt,
+                        cli_ui=cli_ui,
+                        pending_title_threads=pending_title_threads,
+                        save_message_fn=save_message_fn,
+                        rewrite_session_fn=rewrite_session_fn,
+                        archive_session_fn=archive_session_fn,
+                        load_session_meta_fn=load_session_meta_fn,
+                        write_approval_state=write_approval_state,
+                    )
+                )
         else:
-            user_content = message
-            title_user_message = message_content_text(message)
-
-        cli_ui.set_render_markdown(_render_markdown_enabled(agent))
-        cli_ui.begin_assistant_response()
-
-        def _stream_writer(token: str) -> None:
-            cli_ui.bump_tokens(max(1, len(token) // 4))
-            cli_ui.stream_token(token)
-
-        try:
-            response, new_messages = agent.run_conversation(
-                user_content,
-                conversation_history=active_history,
-                stream_writer=_stream_writer,
-                events=events,
-                clarify_callback=clarify_callback,
-                current_session_id=active_session_id,
-            )
-        finally:
-            cli_ui.stop_thinking()
-        cli_ui.finish_assistant_response(response or "")
-
-        compaction_outcome = getattr(agent, "last_compaction_outcome", None)
-        replay_history = list(getattr(agent, "last_replay_history", []))
-        if compaction_outcome is not None and compaction_outcome.did_compact:
-            compacted_base_history = replay_history[:-len(new_messages)] if new_messages else replay_history
-            archive_session_fn(active_session_id, reason="auto-compact")
-            rewrite_session_fn(
-                active_session_id,
-                compacted_base_history,
-                meta_updates=_build_compaction_meta_updates(load_session_meta_fn(active_session_id)),
-            )
-            active_history = list(compacted_base_history)
-            cli_ui.print_compaction_result(
-                estimated_tokens_before=compaction_outcome.estimated_tokens_before,
-                estimated_tokens_after=compaction_outcome.estimated_tokens_after,
-                dropped_messages=compaction_outcome.dropped_messages,
-                passes=compaction_outcome.passes,
+            _run_single_turn(
+                message=message,
+                agent=agent,
+                active_session_id=active_session_id,
+                active_history=active_history,
+                prompt=prompt,
+                cli_ui=cli_ui,
+                pending_title_threads=pending_title_threads,
+                save_message_fn=save_message_fn,
+                rewrite_session_fn=rewrite_session_fn,
+                archive_session_fn=archive_session_fn,
+                load_session_meta_fn=load_session_meta_fn,
             )
 
-        for msg in new_messages:
-            save_message_fn(active_session_id, msg)
-        active_history.extend(new_messages)
 
-        title_thread = _maybe_schedule_auto_title(
-            agent=agent,
-            session_id=active_session_id,
-            user_message=title_user_message,
-            assistant_response=response or "",
-            history=active_history,
+def _execute_agent_turn(
+    *,
+    message,
+    agent,
+    active_session_id,
+    active_history,
+    prompt,
+    cli_ui,
+    input_reader=None,
+):
+    """Prepare and execute one agent turn; safe to run in a worker thread."""
+    events = _build_agent_events(cli_ui)
+    clarify_callback = _build_clarify_callback(
+        cli_ui,
+        prompt,
+        input_reader=input_reader,
+    )
+    if isinstance(message, str):
+        expanded_message = expand_context_references(
+            message,
+            current_session_id=active_session_id,
         )
-        if title_thread is not None:
-            pending_title_threads.append(title_thread)
+        prepared_prompt = prepare_image_prompt(
+            message,
+            text_for_model=expanded_message,
+            selector=clarify_callback,
+        )
+        for warning in prepared_prompt.warnings:
+            cli_ui.print_warning(warning)
+        user_content = prepared_prompt.content
+        title_user_message = message
+    else:
+        user_content = message
+        title_user_message = message_content_text(message)
+
+    def _stream_writer(token: str) -> None:
+        cli_ui.bump_tokens(max(1, len(token) // 4))
+        cli_ui.stream_token(token)
+
+    try:
+        response, new_messages = agent.run_conversation(
+            user_content,
+            conversation_history=active_history,
+            stream_writer=_stream_writer,
+            events=events,
+            clarify_callback=clarify_callback,
+            current_session_id=active_session_id,
+        )
+    finally:
+        cli_ui.stop_thinking()
+    return response, new_messages, title_user_message
+
+
+def _finish_agent_turn(
+    *,
+    response,
+    new_messages,
+    title_user_message,
+    agent,
+    active_session_id,
+    active_history,
+    cli_ui,
+    pending_title_threads,
+    save_message_fn,
+    rewrite_session_fn,
+    archive_session_fn,
+    load_session_meta_fn,
+) -> None:
+    """Render and persist one completed turn on the REPL thread."""
+    cli_ui.finish_assistant_response(response or "")
+
+    compaction_outcome = getattr(agent, "last_compaction_outcome", None)
+    replay_history = list(getattr(agent, "last_replay_history", []))
+    if compaction_outcome is not None and compaction_outcome.did_compact:
+        compacted_base_history = (
+            replay_history[:-len(new_messages)] if new_messages else replay_history
+        )
+        archive_session_fn(active_session_id, reason="auto-compact")
+        rewrite_session_fn(
+            active_session_id,
+            compacted_base_history,
+            meta_updates=_build_compaction_meta_updates(
+                load_session_meta_fn(active_session_id)
+            ),
+        )
+        active_history[:] = compacted_base_history
+        cli_ui.print_compaction_result(
+            estimated_tokens_before=compaction_outcome.estimated_tokens_before,
+            estimated_tokens_after=compaction_outcome.estimated_tokens_after,
+            dropped_messages=compaction_outcome.dropped_messages,
+            passes=compaction_outcome.passes,
+        )
+
+    for msg in new_messages:
+        save_message_fn(active_session_id, msg)
+    active_history.extend(new_messages)
+
+    title_thread = _maybe_schedule_auto_title(
+        agent=agent,
+        session_id=active_session_id,
+        user_message=title_user_message,
+        assistant_response=response or "",
+        history=active_history,
+    )
+    if title_thread is not None:
+        pending_title_threads.append(title_thread)
+
+
+def _run_single_turn(
+    *,
+    message,
+    agent,
+    active_session_id,
+    active_history,
+    prompt,
+    cli_ui,
+    pending_title_threads,
+    save_message_fn,
+    rewrite_session_fn,
+    archive_session_fn,
+    load_session_meta_fn,
+) -> None:
+    """Compatibility path for injected prompt sessions without prompt_async."""
+    cli_ui.set_render_markdown(_render_markdown_enabled(agent))
+    cli_ui.begin_assistant_response()
+    response, new_messages, title_user_message = _execute_agent_turn(
+        message=message,
+        agent=agent,
+        active_session_id=active_session_id,
+        active_history=active_history,
+        prompt=prompt,
+        cli_ui=cli_ui,
+    )
+    _finish_agent_turn(
+        response=response,
+        new_messages=new_messages,
+        title_user_message=title_user_message,
+        agent=agent,
+        active_session_id=active_session_id,
+        active_history=active_history,
+        cli_ui=cli_ui,
+        pending_title_threads=pending_title_threads,
+        save_message_fn=save_message_fn,
+        rewrite_session_fn=rewrite_session_fn,
+        archive_session_fn=archive_session_fn,
+        load_session_meta_fn=load_session_meta_fn,
+    )
+
+
+def _prompt_buffer_text(prompt: Any) -> str:
+    buffer = getattr(prompt, "default_buffer", None)
+    return str(getattr(buffer, "text", "") or "")
+
+
+async def _cancel_prompt_task(task: Optional[asyncio.Task]) -> None:
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, KeyboardInterrupt, EOFError):
+        pass
+
+
+async def _run_turns_with_followups(
+    *,
+    initial_message,
+    agent,
+    active_session_id,
+    active_history,
+    prompt,
+    cli_ui,
+    pending_title_threads,
+    save_message_fn,
+    rewrite_session_fn,
+    archive_session_fn,
+    load_session_meta_fn,
+    write_approval_state,
+) -> str:
+    """Run agent turns in a worker while the terminal queues follow-ups."""
+    loop = asyncio.get_running_loop()
+    broker = PromptBroker(loop)
+    followups = FollowUpQueue()
+    draft = ""
+
+    if _confirm_edits_enabled(agent):
+        set_write_approval_callback(
+            _build_write_approval_callback(
+                cli_ui,
+                prompt,
+                input_reader=broker.ask_from_worker,
+                state=write_approval_state,
+            )
+        )
+
+    current_message = initial_message
+    try:
+        while current_message is not None:
+            cli_ui.set_render_markdown(_render_markdown_enabled(agent))
+            cli_ui.begin_assistant_response()
+            agent_task = asyncio.create_task(
+                asyncio.to_thread(
+                    _execute_agent_turn,
+                    message=current_message,
+                    agent=agent,
+                    active_session_id=active_session_id,
+                    active_history=active_history,
+                    prompt=prompt,
+                    cli_ui=cli_ui,
+                    input_reader=broker.ask_from_worker,
+                )
+            )
+            input_task: Optional[asyncio.Task] = asyncio.create_task(
+                prompt.prompt_async(
+                    [("class:prompt", "follow-up> ")],
+                    default=draft,
+                )
+            )
+            draft = ""
+            modal_task: asyncio.Task = asyncio.create_task(broker.next_request())
+            collect_input = True
+
+            while True:
+                wait_for = {agent_task, modal_task}
+                if input_task is not None:
+                    wait_for.add(input_task)
+                done, _ = await asyncio.wait(
+                    wait_for,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                if input_task is not None and input_task in done:
+                    try:
+                        queued = input_task.result().strip()
+                    except (KeyboardInterrupt, EOFError):
+                        collect_input = False
+                    else:
+                        if queued.startswith("/"):
+                            cli_ui.print_warning(
+                                "Slash commands cannot be queued while Astra is working."
+                            )
+                        elif queued:
+                            followups.put(queued)
+                            cli_ui.print_success(
+                                f"Queued follow-up ({followups.size()})."
+                            )
+                    input_task = None
+                    if collect_input and agent_task not in done:
+                        input_task = asyncio.create_task(
+                            prompt.prompt_async(
+                                [("class:prompt", "follow-up> ")]
+                            )
+                        )
+
+                if modal_task in done:
+                    request = modal_task.result()
+                    if input_task is not None:
+                        draft = _prompt_buffer_text(prompt)
+                        await _cancel_prompt_task(input_task)
+                        input_task = None
+                    try:
+                        answer = await prompt.prompt_async(request.message)
+                    except (KeyboardInterrupt, EOFError):
+                        answer = ""
+                    if not request.result.done():
+                        request.result.set_result(answer)
+                    modal_task = asyncio.create_task(broker.next_request())
+                    if collect_input and agent_task not in done:
+                        input_task = asyncio.create_task(
+                            prompt.prompt_async(
+                                [("class:prompt", "follow-up> ")],
+                                default=draft,
+                            )
+                        )
+                        draft = ""
+                    continue
+
+                if agent_task in done:
+                    if input_task is not None:
+                        draft = _prompt_buffer_text(prompt)
+                        await _cancel_prompt_task(input_task)
+                    modal_task.cancel()
+                    await _cancel_prompt_task(modal_task)
+                    response, new_messages, title_user_message = agent_task.result()
+                    _finish_agent_turn(
+                        response=response,
+                        new_messages=new_messages,
+                        title_user_message=title_user_message,
+                        agent=agent,
+                        active_session_id=active_session_id,
+                        active_history=active_history,
+                        cli_ui=cli_ui,
+                        pending_title_threads=pending_title_threads,
+                        save_message_fn=save_message_fn,
+                        rewrite_session_fn=rewrite_session_fn,
+                        archive_session_fn=archive_session_fn,
+                        load_session_meta_fn=load_session_meta_fn,
+                    )
+                    current_message = followups.pop()
+                    if current_message is not None:
+                        cli_ui.print_success("Running queued follow-up.")
+                    break
+    finally:
+        broker.close()
+        if _confirm_edits_enabled(agent):
+            set_write_approval_callback(
+                _build_write_approval_callback(
+                    cli_ui,
+                    prompt,
+                    state=write_approval_state,
+                )
+            )
+        else:
+            set_write_approval_callback(None)
+    return draft
 
 
 def _render_markdown_enabled(agent) -> bool:
@@ -426,6 +722,9 @@ def _confirm_edits_enabled(agent) -> bool:
 def _build_write_approval_callback(
     cli_ui: CliUI,
     prompt_session: Any,
+    *,
+    input_reader: Optional[Callable[[Any], str]] = None,
+    state: Optional[dict[str, bool]] = None,
 ) -> Callable[[str, str, str], bool]:
     """Return a callback that previews a diff and reads an apply/skip/always answer.
 
@@ -433,21 +732,22 @@ def _build_write_approval_callback(
     the session. The session-wide "always" latch lives in this closure so the
     tool side stays a simple bool.
     """
-    state = {"always": False}
+    approval_state = state if state is not None else {"always": False}
+    read_input = input_reader or prompt_session.prompt
 
     def _approve(path: str, diff: str, action: str) -> bool:
-        if state["always"]:
+        if approval_state["always"]:
             return True
         cli_ui.stop_thinking()
         cli_ui.print_diff(path, diff)
         try:
-            answer = prompt_session.prompt(
+            answer = read_input(
                 [("class:prompt", f"apply {action}? [y/n/a] ")]
             ).strip().lower()
         except (KeyboardInterrupt, EOFError):
             return False
         if answer == "a":
-            state["always"] = True
+            approval_state["always"] = True
             return True
         return answer in ("y", "yes")
 
@@ -488,6 +788,8 @@ def _build_agent_events(cli_ui: CliUI) -> AgentEvents:
 def _build_clarify_callback(
     cli_ui: CliUI,
     prompt_session: Any,
+    *,
+    input_reader: Optional[Callable[[Any], str]] = None,
 ) -> Callable[[str, Optional[List[str]]], str]:
     """Return a callback that renders the clarify prompt and reads one answer.
 
@@ -495,11 +797,13 @@ def _build_clarify_callback(
     else (including the implicit "Other" option) is returned verbatim.
     """
 
+    read_input = input_reader or prompt_session.prompt
+
     def _clarify(question: str, choices: Optional[List[str]]) -> str:
         cli_ui.stop_thinking()
         cli_ui.print_clarify_question(question, choices)
         try:
-            answer = prompt_session.prompt([("class:prompt", "answer> ")]).strip()
+            answer = read_input([("class:prompt", "answer> ")]).strip()
         except (KeyboardInterrupt, EOFError):
             return ""
 

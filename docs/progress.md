@@ -512,6 +512,20 @@ Why: since v0.3.0 every delegate run persisted as its own JSONL session, and ses
 - [x] `tests/tools/test_session_search_tool.py` - schema flag, tool-level default demotion (recent + search), include_children passthrough
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 502 passed
 
+## v0.3.5 - Queued Follow-up Messages (2026-09-28)
+
+Why: the synchronous REPL blocked all user input until a long agent run finished, so users could not line up the next instruction while waiting.
+
+### Completed
+
+- [x] `astra_claw/cli/followup.py` - thread-safe FIFO `FollowUpQueue` plus `PromptBroker`, which lets synchronous worker callbacks request exclusive input from the main asyncio prompt loop
+- [x] `astra_claw/cli/repl.py` - agent turns run via `asyncio.to_thread` while `prompt_async()` collects `follow-up>` input; completed turns are rendered/persisted before queued messages run with updated history
+- [x] Prompt ownership: write approvals and `clarify` questions pause follow-up collection, use the terminal exclusively, then restore any partially typed draft; slash commands are rejected while busy
+- [x] Existing synchronous injected prompt sessions retain the original execution path for lightweight tests and non-prompt_toolkit callers
+- [x] `tests/cli/test_followup.py` + `tests/cli/test_repl.py` - FIFO behavior, broker shutdown, blocked-turn queueing, ordered history/JSONL persistence, and write-approval/clarify prompt handoff
+- [x] Real prompt_toolkit pipe-input smoke: `start` + queued `follow up` produced two ordered agent calls and four ordered saved messages
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 507 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

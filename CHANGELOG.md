@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-09-28
+
+### Added
+- Queued follow-up messages in the interactive REPL: while an agent turn runs in a worker thread, `follow-up>` keeps accepting FIFO messages and runs them automatically after the current turn. Write approvals and `clarify` questions temporarily take exclusive control of the same prompt.
+
 ## [0.3.4] - 2026-09-28
 
 ### Changed

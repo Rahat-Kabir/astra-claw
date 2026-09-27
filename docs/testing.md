@@ -26,6 +26,7 @@ python -m pytest tests/cli/test_usage.py tests/cli/test_repl.py::test_usage_comm
 python -m pytest tests/cli/test_model_command.py -v
 python -m pytest tests/tools/test_write_approval.py -v
 python -m pytest tests/tools/test_undo_stack.py tests/cli/test_repl.py -v
+python -m pytest tests/cli/test_followup.py tests/cli/test_repl.py -v
 python -m pytest tests/test_session.py::TestChildSessionDemotion tests/tools/test_session_search_tool.py -v
 python -m pytest tests/tools/test_delegate_tool.py -v
 python -m pytest tests/cli/test_context_refs.py tests/cli/test_context_completion.py tests/cli/test_repl.py -v
@@ -60,6 +61,7 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 - `tests/cli/test_model_command.py`: `parse_model_arg` (explicit/bare/malformed) + `set_primary_route` in-place switch
 - `tests/tools/test_write_approval.py`: write-approval default-allow, write_file/patch reject (no write) + approve (writes), diff passed to callback, no-trailing-newline diff regression, REPL "always" latch
 - `tests/tools/test_undo_stack.py`: `/undo` stack (LIFO, 25-entry eviction, clear), resolved-path capture + fence recheck, every `undo_last_write` status (restored/removed/already_gone/refused_modified/refused_missing/refused_unsafe/error, pop-on-success only), write_file/patch record-after-success, failed writes record nothing, unreadable-existing-file fail-fast, tampered-file refusal, chained undos
+- `tests/cli/test_followup.py` + `tests/cli/test_repl.py`: FIFO follow-up queue, broker shutdown, concurrent input while an agent worker is blocked, ordered history/JSONL persistence, and prompt handoff for write approval and `clarify`
 - `tests/test_session.py::TestChildSessionDemotion`: delegate child sessions (meta `parent_id`) demoted behind real sessions in `list_recent_sessions` (filler-only slots) and `search_sessions` (shortlist + final sort), `is_child` flag on results, `include_children=True` restores normal ranking
 - `tests/tools/test_delegate_tool.py`: delegate tool with a `FakeChildAgent` (no live LLM) - schema, unavailable-standalone dispatch, summary JSON, briefing contents (incl. anti-hallucination imperative regression), child config (memory off / blocked toolsets / turn clamping / parent not mutated), max-turns salvage, crash handling, child session + `parent_id` meta, event forwarding without `on_thinking`, tool_runner special-casing
 - `tests/cli/test_ui_markdown.py`: Markdown buffer/finish behavior and plain-stream trailing newline
