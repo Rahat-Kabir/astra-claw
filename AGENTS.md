@@ -56,6 +56,7 @@ astra-claw/
 |   |   |-- commands.py       # slash commands + prompt completion
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion before agent turns
 |   |   |-- context_completion.py # fuzzy tab completion for context refs in the REPL
+|   |   |-- image_attachments.py # ordinary image-path discovery + base64 multimodal content
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model) + section flags
 |   |   |-- skills.py         # lightweight SKILL.md discovery + one-turn invocation helpers
@@ -120,6 +121,7 @@ agent/streaming.py (no agent-local deps)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_tool, tools.registry, agent.events)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/context_refs.py (imports constants, session, tools.path_safety)
+cli/image_attachments.py (imports tools.path_safety)
 cli/tool_display.py (pure helpers; no Rich or prompt_toolkit)
 cli/history_edit.py (pure helpers; no Rich or prompt_toolkit)
 cli/usage.py       (pure helpers; no Rich or prompt_toolkit)
@@ -144,6 +146,7 @@ __main__.py        (imports loop + cli + session)
 - Compaction summary calls must pass `on_thinking=None` so the user's spinner only tracks user-facing turns.
 - CLI tool-call feedback logic belongs in `cli/tool_display.py` (pure) and `cli/ui.py` (Rich); do not print tool previews or summaries from inside the agent loop.
 - Context reference expansion belongs in `cli/context_refs.py` and runs before user text reaches `run_conversation()`. Supported refs are `@file:`, `@folder:`, `@diff`, and `@session:`; keep expansion bounded and block sensitive paths. REPL tab completion lives in `cli/context_completion.py` with fuzzy file/folder search and session title matching.
+- Native image attachment preparation belongs in `cli/image_attachments.py`: detect PNG/JPEG/GIF/WebP by signature, discover only paths explicitly present in the user's text, block sensitive/oversized files, and return OpenAI-compatible text + `image_url` content blocks. Interactive folders with multiple images must ask which image; non-interactive ambiguity must warn and attach none. Multimodal content is persisted in JSONL, and search/compaction must never treat base64 as searchable text or ordinary token text.
 - Lightweight skills live under `~/.astraclaw/skills/**/SKILL.md`. `cli/skills.py` discovers metadata, `/skills` lists installed skills, `/<skill-name> [request]` or `/skill <name> <request>` injects full skill content for one turn, `tools/skills_tool.py` exposes agent-driven `list`/`view`, and `prompt_builder.py` only adds the compact skill index.
 - Context compaction is persistent: long histories are summarized into a synthetic assistant message, archived, and rewritten in the session JSONL so resumed sessions replay the compacted transcript.
 - `/compact` is a local CLI command for manual history compaction; automatic preflight compaction may also rewrite the active session when the estimated budget is exceeded.

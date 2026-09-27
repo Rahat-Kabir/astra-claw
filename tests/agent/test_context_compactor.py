@@ -189,3 +189,29 @@ def test_estimate_request_breakdown_sums_to_total():
     assert total == system + tools + hist
     assert system > 0
     assert hist > 0
+
+
+def test_multimodal_estimate_does_not_count_base64_as_text_tokens():
+    compactor = _compactor(context_window=10000)
+    short_image = _message(
+        "user",
+        [
+            {"type": "text", "text": "look"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,a"}},
+        ],
+    )
+    long_image = _message(
+        "user",
+        [
+            {"type": "text", "text": "look"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64," + "a" * 100_000},
+            },
+        ],
+    )
+
+    short_tokens = compactor.estimate_request_tokens(system_prompt="", history=[short_image])
+    long_tokens = compactor.estimate_request_tokens(system_prompt="", history=[long_image])
+
+    assert short_tokens == long_tokens

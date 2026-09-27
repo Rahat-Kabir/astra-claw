@@ -140,6 +140,29 @@ class TestAstraAgentLoop:
             {"role": "assistant", "content": "Hello world"},
         ]
 
+    def test_run_conversation_sends_and_returns_multimodal_user_content(self):
+        streams = [[FakeChunk(FakeDelta(content="I can see it."))]]
+        client = FakeClient(streams)
+        content = [
+            {"type": "text", "text": "Describe this image"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64,aW1hZ2U="},
+            },
+        ]
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=client):
+                agent = AstraAgent()
+                text, new_messages = agent.run_conversation(content)
+
+        assert text == "I can see it."
+        assert new_messages[0] == {"role": "user", "content": content}
+        assert client.chat.completions.calls[0]["messages"][-1] == {
+            "role": "user",
+            "content": content,
+        }
+
     def test_run_conversation_streams_to_callback_when_provided(self):
         """Agent should send streamed text through the caller-provided callback."""
         streams = [

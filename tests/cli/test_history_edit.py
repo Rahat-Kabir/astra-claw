@@ -70,3 +70,19 @@ def test_truncate_for_retry_only_user_message():
 
     assert text == "solo"
     assert truncated == []
+
+
+def test_truncate_for_retry_preserves_multimodal_content():
+    content = [
+        {"type": "text", "text": "describe"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,eA=="}},
+    ]
+    history = [
+        {"role": "user", "content": content},
+        {"role": "assistant", "content": "done"},
+    ]
+
+    truncated, retry_content = truncate_for_retry(history)
+
+    assert truncated == []
+    assert retry_content == content

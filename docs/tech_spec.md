@@ -128,6 +128,16 @@ Final Response
 - Rejected package mutations never reach `subprocess.run`; ordinary commands such as `uv run pytest` and `npm test` remain ungated
 - The Windows shell hint now reflects `subprocess.run(..., shell=True)` behavior more precisely: Windows commands should remain `cmd`-compatible
 
+### Native Image Attachments
+
+- Core contract change: a user message may now hold either a text string or an OpenAI-compatible content-block list (`text` plus one or more `image_url` data URLs). Text-only turns keep the original string shape.
+- `cli/image_attachments.py` discovers only real paths present in the user's prompt. Direct images attach immediately; a folder with one supported image auto-selects it; a folder with several uses the existing CLI clarify callback to ask which one. One-shot mode cannot ask, so it warns and attaches none.
+- Image type is detected from file signatures rather than extensions. Supported inputs are PNG, JPEG, GIF, and WebP, capped at 10 MB each and 4 images per prompt. Sensitive paths reuse `tools/path_safety.py` blocking.
+- Selected image bytes are base64-encoded into `data:<mime>;base64,...` URLs. The text block includes the resolved image paths so the model can associate content with filenames.
+- Multimodal user messages are written directly into the session JSONL. Resume and `/retry` therefore replay the original bytes even if the source file moves. Session preview/search extracts only text blocks and an image marker.
+- Compaction estimates each image as a fixed 1200 tokens instead of counting base64 characters. Compaction summaries replace image payloads with `[image attachment]`, preventing large encoded data from entering the summarization prompt.
+- Astra-Claw does not maintain a model-capability catalog in v1. The configured provider/model must accept image input; provider errors remain visible rather than silently falling back to OCR.
+
 ### CLI/TUI Layer
 
 - Interactive mode uses `prompt_toolkit` for input history, slash command completion, and prompt handling

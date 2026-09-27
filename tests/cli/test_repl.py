@@ -148,6 +148,35 @@ def test_prompt_context_refs_are_expanded_before_agent_call(tmp_path, monkeypatc
     assert saved[0][1]["content"] == agent.calls[0]["message"]
 
 
+def test_prompt_folder_with_multiple_images_asks_and_attaches_choice(tmp_path, monkeypatch):
+    folder = tmp_path / "photos"
+    folder.mkdir()
+    (folder / "a.png").write_bytes(b"\x89PNG\r\n\x1a\nimage-a")
+    (folder / "b.jpg").write_bytes(b"\xff\xd8\xffimage-b")
+    agent = FakeAgent()
+    saved = []
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(
+            [f"Tell me what is in {folder}", "2", "/exit"]
+        ),
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    content = agent.calls[0]["message"]
+    assert isinstance(content, list)
+    assert content[0]["type"] == "text"
+    assert "b.jpg" in content[0]["text"]
+    assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert saved[0][1]["content"] == content
+    assert "Which image" in output.getvalue()
+
+
 def test_slash_commands_do_not_call_agent():
     agent = FakeAgent()
     ui, output = _ui_and_output()

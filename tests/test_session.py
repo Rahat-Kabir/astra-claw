@@ -85,6 +85,25 @@ class TestSession:
             assert messages[0] == {"role": "user", "content": "Hello"}
             assert messages[1] == {"role": "assistant", "content": "Hi"}
 
+    def test_multimodal_message_persists_and_remains_searchable(self, tmp_path):
+        content = [
+            {"type": "text", "text": "describe the dashboard screenshot"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/png;base64,aW1hZ2U="},
+            },
+        ]
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            session_id = create_session()
+            save_message(session_id, {"role": "user", "content": content})
+
+            loaded = load_session(session_id)
+            results = search_sessions("dashboard screenshot")
+
+        assert loaded == [{"role": "user", "content": content}]
+        assert results["results"][0]["session_id"] == session_id
+        assert "dashboard screenshot" in results["results"][0]["preview"]
+
     def test_load_session_missing_file_returns_empty_list(self, tmp_path):
         with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
             assert load_session("missing_session") == []

@@ -20,6 +20,7 @@ from ..session import (
     create_session,
     list_sessions,
     load_session_meta,
+    message_content_text,
     rewrite_session,
     save_message,
 )
@@ -27,6 +28,7 @@ from ..tools.path_safety import set_write_approval_callback
 from .commands import resolve_command, parse_model_arg, AstraCompleter
 from .context_refs import expand_context_references
 from .history_edit import truncate_for_retry
+from .image_attachments import prepare_image_prompt
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
 from .tool_display import build_tool_preview, summarize_tool_result
 from .ui import CliUI
@@ -283,10 +285,23 @@ def _run_loop(
 
         events = _build_agent_events(cli_ui)
         clarify_callback = _build_clarify_callback(cli_ui, prompt)
-        expanded_message = expand_context_references(
-            message,
-            current_session_id=active_session_id,
-        )
+        if isinstance(message, str):
+            expanded_message = expand_context_references(
+                message,
+                current_session_id=active_session_id,
+            )
+            prepared_prompt = prepare_image_prompt(
+                message,
+                text_for_model=expanded_message,
+                selector=clarify_callback,
+            )
+            for warning in prepared_prompt.warnings:
+                cli_ui.print_warning(warning)
+            user_content = prepared_prompt.content
+            title_user_message = message
+        else:
+            user_content = message
+            title_user_message = message_content_text(message)
 
         cli_ui.set_render_markdown(_render_markdown_enabled(agent))
         cli_ui.begin_assistant_response()
@@ -297,7 +312,7 @@ def _run_loop(
 
         try:
             response, new_messages = agent.run_conversation(
-                expanded_message,
+                user_content,
                 conversation_history=active_history,
                 stream_writer=_stream_writer,
                 events=events,
@@ -333,7 +348,7 @@ def _run_loop(
         title_thread = _maybe_schedule_auto_title(
             agent=agent,
             session_id=active_session_id,
-            user_message=message,
+            user_message=title_user_message,
             assistant_response=response or "",
             history=active_history,
         )

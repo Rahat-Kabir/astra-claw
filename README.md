@@ -40,6 +40,7 @@ It is not designed as:
 - Runs shell commands via `shell` with approval for destructive commands and package/environment mutations such as `pip install`, `uv run --with`, and `npm install`
 - Searches files via `search_files` for content or filenames
 - Expands inline context references (`@file:`, `@folder:`, `@diff`, `@session:`) before agent turns, with fuzzy tab completion for file/folder/session picks in the REPL
+- Detects ordinary local image paths in prompts and sends PNG, JPEG, GIF, or WebP files directly to vision-capable models; one-image folders attach automatically and multi-image folders ask which file to use
 - Searches the web via `web_search` and extracts pages via `web_extract` (Tavily-backed, hidden unless `TAVILY_API_KEY` is set)
 - Searches past sessions via `session_search` for recent work or older fixes
 - Plans multi-step work via `todo` (session-scoped task list, re-injected after context compaction)
@@ -71,6 +72,7 @@ Important boundaries:
 - destructive shell commands and package/environment mutations require explicit user approval
 - `--workspace <path>` fences `write_file` and `patch` to a single directory tree
 - `read_file` and `shell` are not fenced by `--workspace`
+- image attachments may read a path explicitly written by the user outside `--workspace`; sensitive paths and images over 10 MB are blocked
 - web tools are optional and only appear when `TAVILY_API_KEY` is set
 - `clarify` is CLI-only and depends on an interactive callback
 
@@ -164,6 +166,15 @@ astra> recall @session:context
 
 Type `@` and Tab to pick a ref type. Partial paths fuzzy-match across the workspace (for example `@file:repl` can complete to a nested file). Context refs are expanded before the model call, capped for size, and blocked for sensitive paths.
 
+Attach an image naturally by typing its file or folder path:
+
+```text
+astra> What is shown in D:\PHOTO\FB\ebay.jpg?
+astra> Read D:\PHOTO\FB and tell me what is there
+```
+
+A direct image attaches immediately. A folder with one supported image attaches it automatically; a folder with several images opens a numbered choice before the model call. The selected image is stored in the session JSONL as multimodal content, so `/retry` and session resume do not depend on the original file remaining in place. The selected model must support image input.
+
 Use a skill for one turn:
 
 ```text
@@ -225,6 +236,7 @@ astra-claw/
 |   |   |-- commands.py       # slash command registry + autocomplete
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion
 |   |   |-- context_completion.py # fuzzy tab completion for context refs
+|   |   |-- image_attachments.py # ordinary-path image detection + multimodal encoding
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- skills.py         # markdown skill discovery + invocation message builder

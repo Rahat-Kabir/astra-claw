@@ -213,7 +213,7 @@ class AstraAgent:
         self,
         conversation_history: Optional[List[Dict[str, Any]]],
         *,
-        pending_user_message: Optional[str] = None,
+        pending_user_message: Optional[Any] = None,
         force: bool = False,
     ) -> tuple[List[Dict[str, Any]], Optional[CompactionOutcome]]:
         history = list(conversation_history) if conversation_history else []
@@ -269,7 +269,7 @@ class AstraAgent:
 
     def run_conversation(
         self,
-        user_message: str,
+        user_message: Any,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
         stream_writer: Optional[Callable[[str], None]] = None,
         *,
@@ -367,11 +367,27 @@ def _format_message_for_compaction_summary(message: Dict[str, Any], max_chars: i
     if role == "tool":
         parts.append(f"tool_call_id={message.get('tool_call_id', '')}")
 
-    content = message.get("content", "")
-    if not isinstance(content, str):
-        content = json.dumps(content, ensure_ascii=False)
+    content = _content_for_compaction_summary(message.get("content", ""))
     content = content.strip()
     if len(content) > max_chars:
         content = content[:max_chars] + "... [truncated]"
     parts.append("content=" + content)
+    return "\n".join(parts)
+
+
+def _content_for_compaction_summary(content: Any) -> str:
+    """Render multimodal content without copying base64 data into summaries."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return json.dumps(content, ensure_ascii=False)
+
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and isinstance(block.get("text"), str):
+            parts.append(block["text"])
+        elif block.get("type") in {"image", "image_url"}:
+            parts.append("[image attachment]")
     return "\n".join(parts)

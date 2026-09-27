@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 
 SUMMARY_PREFIX = "[CONTEXT COMPACTION]"
+ESTIMATED_IMAGE_TOKENS = 1200
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class ContextCompactor:
         *,
         system_prompt: str,
         history: List[Dict[str, Any]],
-        pending_user_message: Optional[str] = None,
+        pending_user_message: Optional[Any] = None,
     ) -> int:
         total = _estimate_text_tokens(system_prompt) + self._tool_schema_tokens
         total += sum(_estimate_message_tokens(message) for message in history)
@@ -62,7 +63,7 @@ class ContextCompactor:
         *,
         system_prompt: str,
         history: List[Dict[str, Any]],
-        pending_user_message: Optional[str] = None,
+        pending_user_message: Optional[Any] = None,
     ) -> tuple[int, int, int, int]:
         return estimate_request_breakdown(
             system_prompt=system_prompt,
@@ -80,7 +81,7 @@ class ContextCompactor:
         *,
         system_prompt: str,
         history: List[Dict[str, Any]],
-        pending_user_message: Optional[str] = None,
+        pending_user_message: Optional[Any] = None,
         force: bool = False,
     ) -> bool:
         if not history:
@@ -190,7 +191,7 @@ def estimate_request_breakdown(
     system_prompt: str,
     history: List[Dict[str, Any]],
     tool_schema_tokens: int,
-    pending_user_message: Optional[str] = None,
+    pending_user_message: Optional[Any] = None,
 ) -> tuple[int, int, int, int]:
     """Return (system, tools, history, total) token estimates."""
     system_tokens = _estimate_text_tokens(system_prompt)
@@ -216,7 +217,22 @@ def _estimate_json_tokens(value: Any) -> int:
 
 
 def _estimate_message_tokens(message: Dict[str, Any]) -> int:
-    return _estimate_json_tokens(message) + 4
+    content = message.get("content")
+    if not isinstance(content, list):
+        return _estimate_json_tokens(message) + 4
+
+    message_without_content = {key: value for key, value in message.items() if key != "content"}
+    total = _estimate_json_tokens(message_without_content) + 4
+    for block in content:
+        if not isinstance(block, dict):
+            total += _estimate_json_tokens(block)
+        elif block.get("type") == "text":
+            total += _estimate_text_tokens(block.get("text", ""))
+        elif block.get("type") in {"image", "image_url"}:
+            total += ESTIMATED_IMAGE_TOKENS
+        else:
+            total += _estimate_json_tokens(block)
+    return total
 
 
 def _find_middle_slice(messages: List[Dict[str, Any]], *, keep_first_n: int, keep_last_n: int) -> tuple[int, int]:

@@ -101,6 +101,16 @@ def test_binary_file_is_rejected(tmp_path, monkeypatch):
     assert "binary or non-UTF-8" in expanded or "binary files are not supported" in expanded
 
 
+def test_image_file_ref_is_marked_for_multimodal_attachment(tmp_path, monkeypatch):
+    _set_workspace(monkeypatch, tmp_path)
+    (tmp_path / "photo.png").write_bytes(b"\x89PNG\r\n\x1a\nimage")
+
+    expanded = expand_context_references("Read @file:photo.png")
+
+    assert "Image attached as multimodal input" in expanded
+    assert "binary files are not supported" not in expanded
+
+
 def test_folder_ref_lists_tree_and_skips_ignored_dirs(tmp_path, monkeypatch):
     _set_workspace(monkeypatch, tmp_path)
     (tmp_path / "src").mkdir()

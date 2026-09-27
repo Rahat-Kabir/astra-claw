@@ -14,7 +14,9 @@ from typing import Iterable, Optional
 
 from ..constants import get_workspace_fence
 from ..session import load_session
+from ..session import message_content_text
 from ..tools.path_safety import inside_workspace_fence, is_sensitive_path
+from .image_attachments import detect_image_mime
 
 
 MAX_TOTAL_CONTEXT_CHARS = 24_000
@@ -130,6 +132,12 @@ def _expand_file(ref: str) -> str:
     if not ok:
         return _warning_block(ref, error)
 
+    if detect_image_mime(path) is not None:
+        return (
+            f"## {ref}\n\nPath: {_display_path(path)}\n\n"
+            "[Image attached as multimodal input.]"
+        )
+
     try:
         content = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
@@ -219,9 +227,7 @@ def _expand_session(ref: str, *, current_session_id: Optional[str]) -> str:
     lines: list[str] = []
     for message in messages:
         role = str(message.get("role", "unknown"))
-        content = message.get("content", "")
-        if not isinstance(content, str):
-            content = str(content)
+        content = message_content_text(message.get("content", ""))
         lines.append(f"{role.upper()}:\n{content.strip()}")
 
     body = _truncate_text("\n\n".join(lines), MAX_SESSION_CHARS, label=ref)

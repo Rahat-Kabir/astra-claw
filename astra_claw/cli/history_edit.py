@@ -2,23 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 def find_last_user_message(
     history: List[Dict],
-) -> Tuple[Optional[int], Optional[str]]:
+) -> Tuple[Optional[int], Optional[Any]]:
     """Return (index, content) of the last user message, or (None, None)."""
     for i in range(len(history) - 1, -1, -1):
         if history[i].get("role") == "user":
             content = history[i].get("content", "")
             if isinstance(content, str) and content.strip():
                 return i, content
+            if isinstance(content, list) and content:
+                return i, content
     return None, None
 
 
-def truncate_for_retry(history: List[Dict]) -> Tuple[List[Dict], Optional[str]]:
-    """Drop the last user turn and return (truncated_history, user_text_to_resend)."""
+def truncate_for_retry(history: List[Dict]) -> Tuple[List[Dict], Optional[Any]]:
+    """Drop the last user turn and return its text or multimodal content."""
     idx, user_text = find_last_user_message(history)
     if idx is None:
         return list(history), None

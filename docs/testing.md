@@ -27,6 +27,7 @@ python -m pytest tests/cli/test_model_command.py -v
 python -m pytest tests/tools/test_write_approval.py -v
 python -m pytest tests/tools/test_delegate_tool.py -v
 python -m pytest tests/cli/test_context_refs.py tests/cli/test_context_completion.py tests/cli/test_repl.py -v
+python -m pytest tests/cli/test_image_attachments.py tests/cli/test_context_refs.py tests/cli/test_repl.py tests/agent/test_loop.py tests/agent/test_context_compactor.py tests/test_session.py -v
 python -m pytest tests/cli/test_skills.py tests/cli/test_repl.py -v
 python -m pytest tests/tools/test_skills_tool.py -v
 python -m pytest tests/test_session.py -v
@@ -59,6 +60,7 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 - `tests/tools/test_delegate_tool.py`: delegate tool with a `FakeChildAgent` (no live LLM) - schema, unavailable-standalone dispatch, summary JSON, briefing contents (incl. anti-hallucination imperative regression), child config (memory off / blocked toolsets / turn clamping / parent not mutated), max-turns salvage, crash handling, child session + `parent_id` meta, event forwarding without `on_thinking`, tool_runner special-casing
 - `tests/cli/test_ui_markdown.py`: Markdown buffer/finish behavior and plain-stream trailing newline
 - `tests/cli/`: slash command, completion, skill discovery/invocation, context-reference expansion and fuzzy completion, REPL routing, `/usage` snapshot tests, Markdown rendering tests, and tool-display preview/summary tests
+- `tests/cli/test_image_attachments.py`: image signature detection, ordinary file/folder path discovery, multi-image selection, base64 content blocks, size limits, and sensitive-path blocking
 - `tests/test_session.py`: JSONL session persistence and JSONL session-search tests
 - `tests/tools/test_shell_tool.py`: shell execution plus destructive/package-mutation risk classification, approval reasons, denial-before-subprocess, and safe-command passthrough
 - `tests/tools/`: remaining tool-level tests for file, patch, search, web, memory, skills, and session-search behavior

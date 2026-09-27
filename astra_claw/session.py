@@ -81,10 +81,28 @@ def _created_sort_key(created: Any) -> str:
     return created if isinstance(created, str) else ""
 
 
+def message_content_text(content: Any) -> str:
+    """Return searchable/displayable text from string or multimodal content."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and isinstance(block.get("text"), str):
+            parts.append(block["text"])
+        elif block.get("type") in {"image", "image_url"}:
+            parts.append("[image attachment]")
+    return "\n".join(parts)
+
+
 def _make_preview(messages: List[Dict[str, Any]]) -> str:
     for message in messages:
-        content = message.get("content")
-        if isinstance(content, str) and content.strip():
+        content = message_content_text(message.get("content"))
+        if content.strip():
             return _truncate_preview(content)
     return ""
 
@@ -165,8 +183,8 @@ def _score_message(
     if allowed_roles is not None and role not in allowed_roles:
         return 0, None
 
-    content = message.get("content")
-    if not isinstance(content, str) or not content.strip():
+    content = message_content_text(message.get("content"))
+    if not content.strip():
         return 0, None
 
     normalized_content = _normalize_search_text(content)

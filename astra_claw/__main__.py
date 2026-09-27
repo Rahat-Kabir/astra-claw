@@ -18,6 +18,7 @@ load_dotenv()  # Load .env file before anything reads env vars
 
 from .agent.loop import AstraAgent
 from .cli.context_refs import expand_context_references
+from .cli.image_attachments import prepare_image_prompt
 from .cli.repl import run_interactive_repl
 from .cli.ui import CliUI
 from .constants import set_workspace_fence
@@ -150,10 +151,16 @@ def main():
     # One-shot mode: no session persistence
     if is_one_shot:
         message = " ".join(sys.argv[1:])
-        message = expand_context_references(message)
+        expanded_message = expand_context_references(message)
+        prepared_prompt = prepare_image_prompt(
+            message,
+            text_for_model=expanded_message,
+        )
         ui = CliUI()
+        for warning in prepared_prompt.warnings:
+            ui.print_warning(warning)
         ui.set_render_markdown(bool((agent.config.get("cli") or {}).get("render_markdown", False)))
-        response, _ = agent.run_conversation(message)
+        response, _ = agent.run_conversation(prepared_prompt.content)
         ui.finish_assistant_response(response or "")
         return
 

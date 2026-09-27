@@ -466,6 +466,23 @@ Why: dogfooding found that package downloads and environment mutations could byp
 - [x] Verified focused suite: `.\venv\Scripts\python.exe -m pytest tests\tools\test_shell_tool.py -q` -> 31 passed
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest tests -q` -> 448 passed
 
+## v0.3.2 - Native Image Attachments (2026-09-28)
+
+Why: dogfooding showed that a simple screenshot forced Astra-Claw through many OCR shell attempts because user messages could only contain text.
+
+### Completed
+
+- [x] `astra_claw/cli/image_attachments.py` - ordinary path discovery, PNG/JPEG/GIF/WebP signature detection, 10 MB/image and 4-image caps, sensitive-path blocking, folder selection, and base64 `image_url` content blocks
+- [x] `astra_claw/cli/repl.py` / `__main__.py` - prepare images before agent turns; interactive multi-image folders ask which file, while one-shot ambiguity warns and attaches none
+- [x] `astra_claw/agent/loop.py` - user turns accept text strings or multimodal content lists and send the content unchanged to the provider
+- [x] `astra_claw/session.py` / `cli/history_edit.py` - JSONL persistence, resume, search/preview text extraction, and `/retry` support for multimodal messages
+- [x] `astra_claw/agent/context_compactor.py` - fixed image token estimate so base64 size does not distort compaction; summaries omit encoded payloads
+- [x] `cli/context_refs.py` - supported images passed through as multimodal attachments instead of binary-file warnings
+- [x] Tests cover signature detection, direct images, one/many-image folders, selection, size/sensitive guards, API message shape, persistence/search, retry, and compaction estimates
+- [x] Local smoke: `D:\PHOTO\FB` resolved `ebay.jpg` and produced a `data:image/jpeg;base64,...` attachment without OCR tools or a model call
+- [x] Verified focused suite: 109 passed
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest tests -q` -> 467 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.
