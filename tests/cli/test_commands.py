@@ -22,6 +22,7 @@ def test_command_registry_contains_core_commands():
         "/usage",
         "/model",
         "/retry",
+        "/undo",
         "/skills",
         "/skill",
         "/exit",

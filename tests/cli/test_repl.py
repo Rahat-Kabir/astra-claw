@@ -685,3 +685,108 @@ def test_retry_with_empty_history_shows_warning():
 
     assert agent.calls == []
     assert "Nothing to retry." in output.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# /undo
+# ---------------------------------------------------------------------------
+
+def test_undo_with_empty_stack_warns_and_skips_agent():
+    from astra_claw.tools import path_safety
+
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/undo", "/exit"]),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert "Nothing to undo." in output.getvalue()
+    assert path_safety._undo_stack == []
+
+
+def test_repl_startup_clears_undo_stack():
+    from astra_claw.tools import path_safety
+
+    path_safety.record_undo("stale.txt", "old", True, "new")
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/undo", "/exit"]),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert "Nothing to undo." in output.getvalue()
+
+
+def test_undo_restores_file_and_notifies_model(tmp_path, monkeypatch):
+    from astra_claw.tools import path_safety
+
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    target = tmp_path / "note.txt"
+    target.write_text("old", encoding="utf-8")
+    path_safety.record_undo(str(target), "old", True, "new")
+    target.write_text("new", encoding="utf-8")
+    # Pre-seeded entry: bypass the (correct) startup wipe for this test.
+    monkeypatch.setattr("astra_claw.cli.repl.clear_undo", lambda: None)
+
+    agent = FakeAgent()
+    saved = []
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/undo", "hello", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert target.read_text(encoding="utf-8") == "old"
+    undo_notes = [msg for _, msg in saved if msg["content"].startswith("[undo]")]
+    assert len(undo_notes) == 1
+    assert "Reverted the last approved write" in undo_notes[0]["content"]
+    # The note reaches the agent as the newest history message.
+    assert agent.calls[0]["history"][-1]["content"].startswith("[undo]")
+    assert "Reverted:" in output.getvalue()
+
+
+def test_undo_refusal_saves_no_note(tmp_path, monkeypatch):
+    from astra_claw.tools import path_safety
+
+    monkeypatch.chdir(tmp_path)
+    constants.set_workspace_fence(tmp_path)
+    target = tmp_path / "gone.txt"
+    path_safety.record_undo(str(target), "old", True, "new")
+    monkeypatch.setattr("astra_claw.cli.repl.clear_undo", lambda: None)
+
+    agent = FakeAgent()
+    saved = []
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(["/undo", "/exit"]),
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert saved == []
+    assert "Not undoing" in output.getvalue()
+    # Refused undo keeps its entry for a later retry.
+    assert len(path_safety._undo_stack) == 1

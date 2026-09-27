@@ -24,7 +24,7 @@ from ..session import (
     rewrite_session,
     save_message,
 )
-from ..tools.path_safety import set_write_approval_callback
+from ..tools.path_safety import clear_undo, set_write_approval_callback, undo_last_write
 from .commands import resolve_command, parse_model_arg, AstraCompleter
 from .context_refs import expand_context_references
 from .history_edit import truncate_for_retry
@@ -83,6 +83,7 @@ def run_interactive_repl(
         model=model_label or None,
     )
 
+    clear_undo()
     if _confirm_edits_enabled(agent):
         set_write_approval_callback(_build_write_approval_callback(cli_ui, prompt))
     else:
@@ -107,6 +108,20 @@ def run_interactive_repl(
     finally:
         set_write_approval_callback(None)
         _join_title_threads(pending_title_threads, cli_ui)
+
+
+def _save_undo_note(
+    save_message_fn: Callable[[str, dict], None],
+    session_id: str,
+    history: list[dict],
+    text: str,
+) -> None:
+    """Persist a synthetic [undo] user message so the model learns the file
+    world changed — without it, a stale full-file rewrite would silently
+    re-apply the write the user just reverted."""
+    note = {"role": "user", "content": text}
+    history.append(note)
+    save_message_fn(session_id, note)
 
 
 def _join_title_threads(threads: list, cli_ui: "CliUI", per_thread_timeout: float = 5.0) -> None:
@@ -249,6 +264,46 @@ def _run_loop(
                 active_history = list(truncated)
                 message = user_text
                 cli_ui.print_success("Retrying last prompt…")
+            elif command.name == "/undo":
+                result = undo_last_write()
+                if result.status == "empty":
+                    cli_ui.print_warning("Nothing to undo.")
+                elif result.status == "restored":
+                    cli_ui.print_success(f"Reverted: {result.path}")
+                    _save_undo_note(
+                        save_message_fn,
+                        active_session_id,
+                        active_history,
+                        f"[undo] Reverted the last approved write to {result.path}; "
+                        "the file is back to its previous state.",
+                    )
+                elif result.status == "removed":
+                    cli_ui.print_success(f"Removed: {result.path}")
+                    _save_undo_note(
+                        save_message_fn,
+                        active_session_id,
+                        active_history,
+                        f"[undo] Deleted {result.path} "
+                        "(it was created by an earlier write this session).",
+                    )
+                elif result.status == "already_gone":
+                    cli_ui.print_warning(f"Already gone: {result.path}")
+                    _save_undo_note(
+                        save_message_fn,
+                        active_session_id,
+                        active_history,
+                        f"[undo] {result.path} was already deleted; nothing to revert.",
+                    )
+                elif result.status in (
+                    "refused_modified",
+                    "refused_missing",
+                    "refused_unsafe",
+                ):
+                    cli_ui.print_warning(
+                        f"Not undoing {result.path} — {result.detail}."
+                    )
+                else:
+                    cli_ui.print_error(f"Undo failed: {result.detail}")
             elif command.name == "/skills":
                 cli_ui.print_skills(list_skills())
             elif command.name == "/skill":

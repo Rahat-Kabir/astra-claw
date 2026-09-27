@@ -59,6 +59,7 @@ It is not designed as:
 - `/retry` removes the last user turn (including tool calls) and re-runs the same prompt
 - `/model` switches the active model live (no restart): `/model provider:model` or bare `/model model`; validates the key and persists the choice
 - Preview-and-approve edits: `write_file`/`patch` show a colored diff and ask before writing (`y`/`n`/`a`); reject tells the model to re-plan. Toggle with `cli.confirm_edits` (default on)
+- `/undo` reverts the last approved file edit: restores the pre-write content (or deletes a file the agent created) and skips the undo if you hand-edited the file afterwards
 - Optional Markdown rendering for assistant replies via `cli.render_markdown` (buffers during the turn, prints formatted bold/lists/headings when the turn ends; session JSONL still stores raw text)
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 - Live CLI feedback: heartbeat spinner with elapsed time, tool count, and rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`), one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red

@@ -390,3 +390,13 @@ __main__.py        (imports loop + cli + session)
 - `tests/test_llm.py` covers `resolve_api_key()` precedence, `create_client()` explicit-key passthrough, and `validate_credentials()` success / unauthorized / timeout / empty-key paths
 - The full suite is run with `python -m pytest tests -v`
 - Focused commands and suite layout live in `docs/testing.md`
+
+## /undo (v0.3.3)
+
+- The undo stack lives in `tools/path_safety.py` beside the write-approval gate it complements: an in-memory LIFO list capped at 25 entries, cleared by the REPL at startup (session-scoped; one-shot mode, delegate children, and tests accumulate harmlessly).
+- Each successful `write_file`/`patch` banks `(resolved_path, old_content, existed, sha256(new_content))` AFTER the write returns - a failed write leaves no entry, so `/undo` can never revert a transition that never happened. Resolving the path at capture time prevents a later cwd change from redirecting undo to a same-named file.
+- `undo_last_write()` peeks the newest entry and rechecks the workspace fence/protected-path rules before touching disk. It also refuses on any post-write divergence: content-hash mismatch (`refused_modified`) or existing file deleted (`refused_missing`). Refusals keep their entry; restore failures (`error`) also keep it; only success pops. A created file that is already gone resolves as `already_gone` (that IS the undone state).
+- Chained writes to one file verify cleanly because each entry's `written_hash` equals the previous entry's post-write content.
+- `/undo` is a local REPL command (no LLM call, no tool schema): the model is told about successful undos through a synthetic `[undo]` user message appended to history + JSONL, because a stale full-file rewrite would otherwise silently re-apply the undone write. `/retry` skips these internal notes when locating the last real user prompt. Refusals inject nothing - no divergence means nothing to correct.
+- Deliberately skipped from Hermes-style checkpointing: shadow git store, retention GC, whole-tree restore, undo-of-undo. The approval gate guarantees a human approved each write moments earlier; a bounded RAM stack covers that risk window.
+- `write_file` fail-fast change (v0.3.3): an existing file that cannot be read returns an error instead of being treated as empty - the old behavior lied in the approval diff and would have let undo "restore" non-empty files as empty.

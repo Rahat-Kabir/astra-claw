@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-28
+
+### Added
+- `/undo` command: reverts the last approved `write_file`/`patch` by restoring the pre-write content (or deleting a file the agent created). Entries are recorded only after successful writes with resolved paths; undo rechecks write safety, refuses when the file changed since the write, and a synthetic `[undo]` note informs the model without becoming a `/retry` target.
+- `write_file` now fails fast when an existing file cannot be read instead of treating it as empty.
+
 ## [0.2.9] - 2026-05-14
 
 ### Changed

@@ -7,6 +7,7 @@ from .path_safety import (
     atomic_write_text,
     inside_workspace_fence,
     is_write_blocked,
+    record_undo,
     request_write_approval,
     unified_diff,
 )
@@ -58,12 +59,15 @@ def write_file(args: dict) -> str:
     if is_write_blocked(filepath):
         return json.dumps({"error": f"Write denied: '{path}' is a protected path"})
 
+    existed = filepath.exists() and filepath.is_file()
     old_content = ""
-    if filepath.exists() and filepath.is_file():
+    if existed:
         try:
             old_content = filepath.read_text(encoding="utf-8")
-        except Exception:
-            old_content = ""
+        except (OSError, UnicodeDecodeError) as e:
+            # Never treat an unreadable file as empty: the approval diff and
+            # any later undo would silently destroy its real content.
+            return json.dumps({"error": f"Cannot read existing file: {e}"})
     diff = unified_diff(old_content, content, str(filepath))
 
     if not request_write_approval(str(filepath), diff, "write"):
@@ -74,9 +78,10 @@ def write_file(args: dict) -> str:
 
     try:
         bytes_written = atomic_write_text(filepath, content)
-        return json.dumps({"path": str(filepath), "bytes_written": bytes_written})
     except Exception as e:
         return json.dumps({"error": f"Failed to write file: {e}"})
+    record_undo(str(filepath), old_content, existed, content)
+    return json.dumps({"path": str(filepath), "bytes_written": bytes_written})
 
 
 # ---------------------------------------------------------------------------

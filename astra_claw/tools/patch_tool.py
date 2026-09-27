@@ -7,6 +7,7 @@ from .path_safety import (
     atomic_write_text,
     inside_workspace_fence,
     is_write_blocked,
+    record_undo,
     request_write_approval,
     unified_diff,
 )
@@ -75,6 +76,7 @@ def patch_file(args: dict) -> str:
         bytes_written = atomic_write_text(filepath, new_content)
     except Exception as e:
         return json.dumps({"error": f"Failed to write file: {e}"})
+    record_undo(str(filepath), old_content, True, new_content)
 
     return json.dumps(
         {

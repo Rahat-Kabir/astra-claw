@@ -483,6 +483,21 @@ Why: dogfooding showed that a simple screenshot forced Astra-Claw through many O
 - [x] Verified focused suite: 109 passed
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest tests -q` -> 467 passed
 
+## v0.3.3 - /undo for Approved File Edits (2026-09-28)
+
+Why: the preview-and-approve gate stopped unwanted writes, but a wrong approved write was irreversible - nothing could restore the previous file state.
+
+### Completed
+
+- [x] `astra_claw/tools/path_safety.py` - bounded in-memory undo stack (25 entries, LIFO): `record_undo()` banks `(resolved_path, old_content, existed, written_hash)` only AFTER a write succeeds; `undo_last_write()` rechecks the fence/protected path, verifies the file still matches the hash Astra wrote, restores via `atomic_write_text` (or unlinks a created file), and pops only on success; `clear_undo()` resets per session
+- [x] Tamper safety: undo refuses (`refused_modified` when the file was hand-edited after Astra's write, `refused_missing` when it was deleted) instead of clobbering user changes; a created file already gone resolves as a no-op (`already_gone`); chained writes undo step by step because each entry's hash equals the previous post-write state
+- [x] `astra_claw/tools/file_tools.py` - `write_file` now fails fast when an existing file cannot be read (previously swallowed into empty content, which lied in the approval diff and would have let undo restore a non-empty file as empty); records undo after a successful write; failed writes record nothing
+- [x] `astra_claw/tools/patch_tool.py` - records undo after a successful patch (files always pre-exist there)
+- [x] `astra_claw/cli/commands.py` / `cli/repl.py` - `/undo` local command (no LLM call); REPL clears the stack at startup; renders `restored`/`removed`/`already_gone`/refusal/error statuses
+- [x] Model notification: successful undos append a synthetic `[undo]` user message to history + JSONL (`_save_undo_note`) so the model stops believing the undone write stands; `/retry` skips these internal notes when finding the last real prompt; refusals inject nothing (no divergence exists)
+- [x] `tests/tools/test_undo_stack.py` (21 tests) + 4 `/undo` REPL tests + `/retry` history coverage - LIFO/limit/clear, resolved-path capture, fence recheck, every undo status, failed writes record nothing, failed restore keeps its entry, unreadable files error, tampered files refuse, chained undos, and internal-note filtering
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 493 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

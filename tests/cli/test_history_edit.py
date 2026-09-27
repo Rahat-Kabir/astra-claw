@@ -28,6 +28,22 @@ def test_find_last_user_message_skips_blank_user_content():
     assert find_last_user_message(history) == (None, None)
 
 
+def test_truncate_for_retry_skips_synthetic_undo_note():
+    history = [
+        {"role": "user", "content": "make the edit"},
+        {"role": "assistant", "content": "done"},
+        {
+            "role": "user",
+            "content": "[undo] Reverted the last approved write to note.txt.",
+        },
+    ]
+
+    truncated, text = truncate_for_retry(history)
+
+    assert text == "make the edit"
+    assert truncated == []
+
+
 def test_truncate_for_retry_removes_last_turn():
     history = [
         {"role": "user", "content": "first"},

@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 
+UNDO_NOTE_PREFIX = "[undo] "
+
+
 def find_last_user_message(
     history: List[Dict],
 ) -> Tuple[Optional[int], Optional[Any]]:
@@ -12,6 +15,8 @@ def find_last_user_message(
     for i in range(len(history) - 1, -1, -1):
         if history[i].get("role") == "user":
             content = history[i].get("content", "")
+            if isinstance(content, str) and content.startswith(UNDO_NOTE_PREFIX):
+                continue
             if isinstance(content, str) and content.strip():
                 return i, content
             if isinstance(content, list) and content:
