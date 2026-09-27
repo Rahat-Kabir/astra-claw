@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-28
+
+### Changed
+- `session_search` now demotes delegate child sessions (meta `parent_id`) behind real conversations in both recent and search modes, and tags results with `is_child`; `include_children=true` opts out. Delegate scratch transcripts no longer surface as past "memories".
+
 ## [0.3.3] - 2026-09-28
 
 ### Added

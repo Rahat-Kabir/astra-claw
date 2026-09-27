@@ -13,6 +13,7 @@ def session_search_tool(
     role_filter: str | None = None,
     limit: int = 3,
     exclude_session_id: str | None = None,
+    include_children: bool = False,
 ) -> str:
     """Browse recent sessions or search past sessions. Returns JSON string."""
     try:
@@ -21,13 +22,18 @@ def session_search_tool(
         limit = 3
 
     if query is None or not str(query).strip():
-        result = list_recent_sessions(limit=limit, exclude_session_id=exclude_session_id)
+        result = list_recent_sessions(
+            limit=limit,
+            exclude_session_id=exclude_session_id,
+            include_children=bool(include_children),
+        )
     else:
         result = search_sessions(
             str(query),
             limit=limit,
             role_filter=role_filter,
             exclude_session_id=exclude_session_id,
+            include_children=bool(include_children),
         )
     return json.dumps(result, ensure_ascii=False)
 
@@ -43,7 +49,9 @@ SESSION_SEARCH_SCHEMA = {
         "Use this when the user refers to earlier work outside the current "
         "conversation: 'what were we doing before', 'remember when', "
         "'how did we fix X', or 'find the session about Y'. "
-        "Call with no query to list recent sessions."
+        "Call with no query to list recent sessions. "
+        "Delegate child sessions (is_child) are demoted behind real "
+        "conversations; pass include_children=true to rank them normally."
     ),
     "parameters": {
         "type": "object",
@@ -61,6 +69,14 @@ SESSION_SEARCH_SCHEMA = {
                 "description": "Maximum number of sessions to return (default 3, max 5).",
                 "default": 3,
             },
+            "include_children": {
+                "type": "boolean",
+                "description": (
+                    "Include delegate child sessions without demotion "
+                    "(default false)."
+                ),
+                "default": False,
+            },
         },
         "required": [],
     },
@@ -76,6 +92,7 @@ registry.register(
         role_filter=args.get("role_filter"),
         limit=args.get("limit", 3),
         exclude_session_id=None,
+        include_children=args.get("include_children", False),
     ),
     check_fn=_check_session_search_available,
 )

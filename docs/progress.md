@@ -498,6 +498,20 @@ Why: the preview-and-approve gate stopped unwanted writes, but a wrong approved 
 - [x] `tests/tools/test_undo_stack.py` (21 tests) + 4 `/undo` REPL tests + `/retry` history coverage - LIFO/limit/clear, resolved-path capture, fence recheck, every undo status, failed writes record nothing, failed restore keeps its entry, unreadable files error, tampered files refuse, chained undos, and internal-note filtering
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 493 passed
 
+## v0.3.4 - Delegate Child-Session Demotion in session_search (2026-09-28)
+
+Why: since v0.3.0 every delegate run persisted as its own JSONL session, and session_search listed/ranked those child transcripts like real conversations - the agent could "recall" its own intermediate tool noise as if it were past work.
+
+### Completed
+
+- [x] `astra_claw/session.py` - `_demote_children()` stable two-bucket reorder; `list_sessions()` projection now carries `parent_id`; `list_recent_sessions()` demotes child sessions behind all real sessions (children only fill leftover slots) and tags results with `is_child`; `search_sessions()` demotes in both the candidate shortlist and the final score sort (children still surface when nothing else matches)
+- [x] Opt-in: `include_children=True` on both functions disables demotion (children compete by score/recency normally)
+- [x] `astra_claw/tools/session_search_tool.py` - `include_children` parameter + schema property passed through; tool description now tells the model child sessions exist and are demoted on purpose
+- [x] Human-facing `/sessions` (CLI `list_sessions`) intentionally unchanged - child sessions stay visible there for debugging
+- [x] `tests/test_session.py` (+ `_write_session_file` parent_id option) - demotion order, filler-only slots, include_children recency restore, real-session-beats-louder-child, child-only match, include_children normal ranking
+- [x] `tests/tools/test_session_search_tool.py` - schema flag, tool-level default demotion (recent + search), include_children passthrough
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 502 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

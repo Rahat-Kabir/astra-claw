@@ -402,6 +402,7 @@ def list_sessions() -> List[Dict]:
                     "id": meta.get("id", path.stem),
                     "created": meta.get("created", ""),
                     "title": meta.get("title", ""),
+                    "parent_id": meta.get("parent_id", ""),
                 })
         except OSError:
             continue
@@ -410,28 +411,56 @@ def list_sessions() -> List[Dict]:
     return sessions
 
 
+def _demote_children(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Stable two-bucket reorder: real sessions first, delegate children last.
+
+    Delegate runs persist as their own sessions (meta parent_id set); without
+    this they crowd out genuine recall in session_search (Hermes calls the
+    same fix "session search demotion").
+    """
+    real = [item for item in items if not item.get("is_child")]
+    children = [item for item in items if item.get("is_child")]
+    return real + children
+
+
 def list_recent_sessions(
     limit: int = _RECENT_LIMIT_DEFAULT,
     exclude_session_id: Optional[str] = None,
+    include_children: bool = False,
 ) -> Dict[str, Any]:
-    """Return recent session metadata for recall/browsing."""
+    """Return recent session metadata for recall/browsing.
+
+    Delegate child sessions are demoted behind all real sessions unless
+    include_children is True.
+    """
     limit = max(1, min(int(limit or _RECENT_LIMIT_DEFAULT), _SEARCH_LIMIT_MAX))
-    results: List[Dict[str, Any]] = []
+    primary: List[Dict[str, Any]] = []
+    children: List[Dict[str, Any]] = []
 
     for session in list_sessions():
         session_id = session.get("id", "")
         if exclude_session_id and session_id == exclude_session_id:
             continue
+        is_child = bool(session.get("parent_id"))
         messages = _iter_session_messages(_sessions_dir() / f"{session_id}.jsonl")
-        results.append({
+        entry = {
             "session_id": session_id,
             "title": session.get("title", ""),
             "created": session.get("created", ""),
             "message_count": len(messages),
             "preview": _make_preview(messages),
-        })
-        if len(results) >= limit:
+            "is_child": is_child,
+        }
+        if is_child and not include_children:
+            children.append(entry)
+        else:
+            primary.append(entry)
+        if len(primary) >= limit:
             break
+
+    results = primary[:limit]
+    if len(results) < limit:
+        results.extend(children[: limit - len(results)])
 
     return {
         "success": True,
@@ -446,14 +475,23 @@ def search_sessions(
     limit: int = 3,
     role_filter: Optional[str] = None,
     exclude_session_id: Optional[str] = None,
+    include_children: bool = False,
 ) -> Dict[str, Any]:
-    """Search past JSONL sessions using a cheap two-pass rerank."""
+    """Search past JSONL sessions using a cheap two-pass rerank.
+
+    Delegate child sessions are demoted behind all real sessions unless
+    include_children is True.
+    """
     normalized_query, query_terms = _tokenize_query(query)
     limit = max(1, min(int(limit or 3), _SEARCH_LIMIT_MAX))
     allowed_roles = _parse_role_filter(role_filter)
 
     if not normalized_query:
-        return list_recent_sessions(limit=limit, exclude_session_id=exclude_session_id)
+        return list_recent_sessions(
+            limit=limit,
+            exclude_session_id=exclude_session_id,
+            include_children=include_children,
+        )
 
     candidates: List[Dict[str, Any]] = []
     recent_fallback: List[Dict[str, Any]] = []
@@ -468,6 +506,7 @@ def search_sessions(
         candidate = {
             "session_id": session_id,
             "meta": meta,
+            "is_child": bool(meta.get("parent_id")),
             "title_score": title_score,
             "recency_bonus": _recency_bonus(meta.get("created")),
             "created": _created_sort_key(meta.get("created")),
@@ -478,6 +517,10 @@ def search_sessions(
 
     candidates.sort(key=lambda item: (item["base_score"], item["created"]), reverse=True)
     recent_fallback.sort(key=lambda item: item["created"], reverse=True)
+
+    if not include_children:
+        candidates = _demote_children(candidates)
+        recent_fallback = _demote_children(recent_fallback)
 
     shortlisted: List[Dict[str, Any]] = []
     seen_session_ids: set[str] = set()
@@ -512,17 +555,21 @@ def search_sessions(
         if candidate["title_score"] <= 0 and not snippets:
             continue
 
-        results.append(
-            _session_result(
-                session_id,
-                meta,
-                messages=messages,
-                score=score,
-                snippets=snippets,
-            )
+        result = _session_result(
+            session_id,
+            meta,
+            messages=messages,
+            score=score,
+            snippets=snippets,
         )
+        result["is_child"] = candidate["is_child"]
+        results.append(result)
 
     results.sort(key=lambda item: (item["score"], item["created"]), reverse=True)
+    if not include_children:
+        # Stable reorder: children drop behind real sessions, score order
+        # within each group preserved.
+        results.sort(key=lambda item: item["is_child"])
     results = results[:limit]
 
     return {

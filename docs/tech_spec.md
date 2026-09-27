@@ -400,3 +400,9 @@ __main__.py        (imports loop + cli + session)
 - `/undo` is a local REPL command (no LLM call, no tool schema): the model is told about successful undos through a synthetic `[undo]` user message appended to history + JSONL, because a stale full-file rewrite would otherwise silently re-apply the undone write. `/retry` skips these internal notes when locating the last real user prompt. Refusals inject nothing - no divergence means nothing to correct.
 - Deliberately skipped from Hermes-style checkpointing: shadow git store, retention GC, whole-tree restore, undo-of-undo. The approval gate guarantees a human approved each write moments earlier; a bounded RAM stack covers that risk window.
 - `write_file` fail-fast change (v0.3.3): an existing file that cannot be read returns an error instead of being treated as empty - the old behavior lied in the approval diff and would have let undo "restore" non-empty files as empty.
+
+## Delegate child-session demotion (v0.3.4)
+
+- Delegate runs persist as their own JSONL sessions with `parent_id` in meta (v0.3.0). Left alone, `session_search` ranked those child transcripts like real conversations, so the agent could "recall" its own intermediate tool noise as if it were past work.
+- Fix is in `session.py`, not the tool: `_demote_children()` is a stable two-bucket reorder (real sessions first, children appended last) applied to the `search_sessions` candidate shortlist, the recent-session fallback list, and the final score-sorted results; `list_recent_sessions` puts children in a second bucket that only fills leftover result slots. Children therefore still surface when nothing else matches - recall stays complete, it just prefers real conversations.
+- Results carry `is_child` so the model can weigh them; `include_children=True` (parameter on both functions and the `session_search` schema) disables demotion entirely. The human-facing `/sessions` listing is intentionally unchanged.

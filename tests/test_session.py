@@ -24,6 +24,7 @@ def _write_session_file(
     session_id: str,
     created: str,
     title: str = "",
+    parent_id: str = "",
     messages: list[dict] | None = None,
     bad_lines: list[str] | None = None,
 ):
@@ -33,6 +34,8 @@ def _write_session_file(
     meta = {"type": "meta", "id": session_id, "created": created}
     if title:
         meta["title"] = title
+    if parent_id:
+        meta["parent_id"] = parent_id
 
     lines = [json.dumps(meta, ensure_ascii=False)]
     for message in messages or []:
@@ -464,3 +467,116 @@ class TestSession:
             result = search_sessions("clarify callback", limit=3)
 
         assert len(result["results"][0]["snippets"]) == 3
+
+
+class TestChildSessionDemotion:
+    """Delegate child sessions (meta parent_id) must not crowd out recall."""
+
+    def test_list_recent_demotes_children_behind_real_sessions(self, tmp_path):
+        _write_session_file(tmp_path, session_id="real_old", created="2026-04-01T10:00:00")
+        _write_session_file(
+            tmp_path,
+            session_id="kid",
+            created="2026-04-25T10:00:00",
+            parent_id="real_old",
+            title="[delegate] scratch",
+        )
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            result = list_recent_sessions(limit=5)
+
+        ids = [item["session_id"] for item in result["results"]]
+        assert ids == ["real_old", "kid"]  # newer child still loses the top slot
+        flags = {item["session_id"]: item["is_child"] for item in result["results"]}
+        assert flags == {"real_old": False, "kid": True}
+
+    def test_list_recent_children_only_fill_leftover_slots(self, tmp_path):
+        _write_session_file(tmp_path, session_id="real_a", created="2026-04-10T10:00:00")
+        _write_session_file(tmp_path, session_id="real_b", created="2026-04-11T10:00:00")
+        _write_session_file(
+            tmp_path, session_id="kid", created="2026-04-25T10:00:00", parent_id="real_a"
+        )
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            result = list_recent_sessions(limit=2)
+
+        ids = [item["session_id"] for item in result["results"]]
+        assert ids == ["real_b", "real_a"]  # limit filled by real sessions only
+
+    def test_list_recent_include_children_restores_recency_order(self, tmp_path):
+        _write_session_file(tmp_path, session_id="real_old", created="2026-04-01T10:00:00")
+        _write_session_file(
+            tmp_path, session_id="kid", created="2026-04-25T10:00:00", parent_id="real_old"
+        )
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            result = list_recent_sessions(limit=5, include_children=True)
+
+        ids = [item["session_id"] for item in result["results"]]
+        assert ids == ["kid", "real_old"]  # pure recency again
+
+    def test_search_demotes_child_even_with_higher_score(self, tmp_path):
+        _write_session_file(
+            tmp_path,
+            session_id="real_weak",
+            created="2026-04-20T10:00:00",
+            title="Payment flow",
+            messages=[{"role": "assistant", "content": "we adjusted the payment retry"}],
+        )
+        _write_session_file(
+            tmp_path,
+            session_id="kid_strong",
+            created="2026-04-21T10:00:00",
+            parent_id="real_weak",
+            title="[delegate] payment flow",
+            messages=[
+                {"role": "assistant", "content": "payment retry mention"},
+                {"role": "user", "content": "payment retry again"},
+            ],
+        )
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            result = search_sessions("payment retry", limit=5)
+
+        ids = [item["session_id"] for item in result["results"]]
+        assert ids[0] == "real_weak"  # real conversation outranks the louder child
+        assert ids[-1] == "kid_strong"
+        assert result["results"][0]["is_child"] is False
+        assert result["results"][-1]["is_child"] is True
+
+    def test_search_returns_child_when_nothing_else_matches(self, tmp_path):
+        _write_session_file(
+            tmp_path,
+            session_id="kid_only",
+            created="2026-04-21T10:00:00",
+            parent_id="some_parent",
+            title="[delegate] websocket handshake",
+            messages=[{"role": "assistant", "content": "websocket handshake details"}],
+        )
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            result = search_sessions("websocket handshake", limit=3)
+
+        assert result["count"] == 1
+        assert result["results"][0]["session_id"] == "kid_only"
+        assert result["results"][0]["is_child"] is True
+
+    def test_search_include_children_ranks_normally(self, tmp_path):
+        _write_session_file(
+            tmp_path,
+            session_id="real_weak",
+            created="2026-04-20T10:00:00",
+            title="Payment flow",
+            messages=[{"role": "assistant", "content": "we adjusted the payment retry"}],
+        )
+        _write_session_file(
+            tmp_path,
+            session_id="kid_strong",
+            created="2026-04-21T10:00:00",
+            parent_id="real_weak",
+            title="[delegate] payment flow",
+            messages=[
+                {"role": "assistant", "content": "payment retry mention"},
+                {"role": "user", "content": "payment retry again"},
+            ],
+        )
+        with patch.dict(os.environ, {"ASTRACLAW_HOME": str(tmp_path)}):
+            result = search_sessions("payment retry", limit=5, include_children=True)
+
+        ids = [item["session_id"] for item in result["results"]]
+        assert ids == ["kid_strong", "real_weak"]  # score order, no demotion
