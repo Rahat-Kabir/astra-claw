@@ -526,6 +526,19 @@ Why: the synchronous REPL blocked all user input until a long agent run finished
 - [x] Real prompt_toolkit pipe-input smoke: `start` + queued `follow up` produced two ordered agent calls and four ordered saved messages
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 507 passed
 
+## v0.3.6 - Collision-free Follow-up Rendering (2026-09-28)
+
+Why: Rich's live spinner and prompt_toolkit's async follow-up prompt both controlled the same terminal; `patch_stdout()` also sanitized Rich's escape byte, exposing sequences such as `?[2K` and letting output collide with typed input on Windows.
+
+### Completed
+
+- [x] `astra_claw/cli/ui.py` - heartbeat state is independent of Rich `Status`; prompt-owned mode keeps elapsed/tool/token counters without starting Rich's cursor renderer
+- [x] `astra_claw/cli/repl.py` - prompt_toolkit exclusively renders the active follow-up prompt plus a 0.5-second heartbeat bottom toolbar
+- [x] Async `patch_stdout(raw=True)` now starts inside the running event loop, preserving ANSI output while prompt_toolkit coordinates terminal redraws
+- [x] `tests/cli/test_ui_heartbeat.py` + `tests/cli/test_repl.py` - prompt-owned state, no concurrent Rich status/thread, toolbar configuration, and ownership cleanup
+- [x] Verified focused CLI suite: `.\venv\Scripts\python.exe -m pytest tests\cli\test_ui_heartbeat.py tests\cli\test_followup.py tests\cli\test_repl.py -q` -> 48 passed
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 510 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

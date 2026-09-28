@@ -45,6 +45,8 @@ class CliUI:
         self._hb_tools: int = 0
         self._hb_tokens: int = 0
         self._hb_label: str = "thinking"
+        self._hb_active: bool = False
+        self._prompt_owns_live_rendering: bool = False
         self._hb_stop: threading.Event = threading.Event()
         self._hb_thread: Optional[threading.Thread] = None
 
@@ -218,15 +220,17 @@ class CliUI:
         Counters (tools, tokens, elapsed start) persist across pause/resume so
         the turn-level totals survive streaming gaps.
         """
-        if self._status is not None:
-            self._hb_label = label
-            self._refresh_heartbeat()
-            return
         if self._hb_started is None:
             self._hb_started = time.monotonic()
             self._hb_tools = 0
             self._hb_tokens = 0
         self._hb_label = label
+        self._hb_active = True
+        if self._prompt_owns_live_rendering:
+            return
+        if self._status is not None:
+            self._refresh_heartbeat()
+            return
         self._status = self.console.status(
             self._render_heartbeat(),
             spinner="dots",
@@ -242,6 +246,11 @@ class CliUI:
 
         A later `start_thinking` resumes with the same elapsed start and totals.
         """
+        self._hb_active = False
+        self._stop_rich_status()
+
+    def _stop_rich_status(self) -> None:
+        """Stop only Rich's renderer without changing heartbeat counters/state."""
         self._hb_stop.set()
         thread = self._hb_thread
         self._hb_thread = None
@@ -252,6 +261,23 @@ class CliUI:
                 self._status.stop()
             finally:
                 self._status = None
+
+    def set_prompt_owned_live_rendering(self, enabled: bool) -> None:
+        """Let prompt_toolkit render live state while an async prompt is active."""
+        enabled = bool(enabled)
+        if enabled == self._prompt_owns_live_rendering:
+            return
+        self._prompt_owns_live_rendering = enabled
+        if enabled:
+            self._stop_rich_status()
+        elif self._hb_active and self._status is None:
+            self.start_thinking(self._hb_label)
+
+    def heartbeat_text(self) -> str:
+        """Plain live status for prompt_toolkit's bottom toolbar."""
+        if not self._hb_active:
+            return ""
+        return " · ".join(self._heartbeat_parts())
 
     def stop_thinking(self) -> None:
         """Hide the spinner and reset heartbeat state. Safe to call repeatedly."""
@@ -286,7 +312,7 @@ class CliUI:
             "stream_tokens": self._hb_tokens,
             "tools": self._hb_tools,
             "elapsed_secs": elapsed,
-            "in_progress": self._status is not None,
+            "in_progress": self._hb_active,
         }
 
     def print_usage_panel(self, snapshot: UsageSnapshot) -> None:
@@ -388,6 +414,9 @@ class CliUI:
         )
 
     def _render_heartbeat(self) -> str:
+        return f"[dim]{escape(' · '.join(self._heartbeat_parts()))}[/dim]"
+
+    def _heartbeat_parts(self) -> List[str]:
         parts = [self._hb_label]
         if self._hb_tools:
             parts.append(f"{self._hb_tools} tool{'s' if self._hb_tools != 1 else ''}")
@@ -395,7 +424,7 @@ class CliUI:
             parts.append(_fmt_elapsed(time.monotonic() - self._hb_started))
         if self._hb_tokens:
             parts.append(f"~{_fmt_tokens(self._hb_tokens)} tok")
-        return f"[dim]{escape(' · '.join(parts))}[/dim]"
+        return parts
 
     def _refresh_heartbeat(self) -> None:
         if self._status is None:

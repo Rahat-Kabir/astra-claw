@@ -167,7 +167,7 @@ def _run_loop(
     prompt_default = ""
     while True:
         try:
-            stdout_context = patch_stdout() if patch_stdout_enabled else nullcontext()
+            stdout_context = patch_stdout(raw=True) if patch_stdout_enabled else nullcontext()
             with stdout_context:
                 message = prompt.prompt(
                     [("class:prompt", "astra> ")],
@@ -355,24 +355,23 @@ def _run_loop(
                     continue
 
         if hasattr(prompt, "prompt_async"):
-            stdout_context = patch_stdout() if patch_stdout_enabled else nullcontext()
-            with stdout_context:
-                prompt_default = asyncio.run(
-                    _run_turns_with_followups(
-                        initial_message=message,
-                        agent=agent,
-                        active_session_id=active_session_id,
-                        active_history=active_history,
-                        prompt=prompt,
-                        cli_ui=cli_ui,
-                        pending_title_threads=pending_title_threads,
-                        save_message_fn=save_message_fn,
-                        rewrite_session_fn=rewrite_session_fn,
-                        archive_session_fn=archive_session_fn,
-                        load_session_meta_fn=load_session_meta_fn,
-                        write_approval_state=write_approval_state,
-                    )
+            prompt_default = asyncio.run(
+                _run_turns_with_followups(
+                    initial_message=message,
+                    agent=agent,
+                    active_session_id=active_session_id,
+                    active_history=active_history,
+                    prompt=prompt,
+                    cli_ui=cli_ui,
+                    pending_title_threads=pending_title_threads,
+                    save_message_fn=save_message_fn,
+                    rewrite_session_fn=rewrite_session_fn,
+                    archive_session_fn=archive_session_fn,
+                    load_session_meta_fn=load_session_meta_fn,
+                    write_approval_state=write_approval_state,
+                    patch_stdout_enabled=patch_stdout_enabled,
                 )
+            )
         else:
             _run_single_turn(
                 message=message,
@@ -568,6 +567,7 @@ async def _run_turns_with_followups(
     archive_session_fn,
     load_session_meta_fn,
     write_approval_state,
+    patch_stdout_enabled,
 ) -> str:
     """Run agent turns in a worker while the terminal queues follow-ups."""
     loop = asyncio.get_running_loop()
@@ -586,113 +586,127 @@ async def _run_turns_with_followups(
         )
 
     current_message = initial_message
+    prompt_kwargs = {
+        "bottom_toolbar": cli_ui.heartbeat_text,
+        "refresh_interval": 0.5,
+    }
+    stdout_context = patch_stdout(raw=True) if patch_stdout_enabled else nullcontext()
+    cli_ui.set_prompt_owned_live_rendering(True)
     try:
-        while current_message is not None:
-            cli_ui.set_render_markdown(_render_markdown_enabled(agent))
-            cli_ui.begin_assistant_response()
-            agent_task = asyncio.create_task(
-                asyncio.to_thread(
-                    _execute_agent_turn,
-                    message=current_message,
-                    agent=agent,
-                    active_session_id=active_session_id,
-                    active_history=active_history,
-                    prompt=prompt,
-                    cli_ui=cli_ui,
-                    input_reader=broker.ask_from_worker,
-                )
-            )
-            input_task: Optional[asyncio.Task] = asyncio.create_task(
-                prompt.prompt_async(
-                    [("class:prompt", "follow-up> ")],
-                    default=draft,
-                )
-            )
-            draft = ""
-            modal_task: asyncio.Task = asyncio.create_task(broker.next_request())
-            collect_input = True
-
-            while True:
-                wait_for = {agent_task, modal_task}
-                if input_task is not None:
-                    wait_for.add(input_task)
-                done, _ = await asyncio.wait(
-                    wait_for,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-
-                if input_task is not None and input_task in done:
-                    try:
-                        queued = input_task.result().strip()
-                    except (KeyboardInterrupt, EOFError):
-                        collect_input = False
-                    else:
-                        if queued.startswith("/"):
-                            cli_ui.print_warning(
-                                "Slash commands cannot be queued while Astra is working."
-                            )
-                        elif queued:
-                            followups.put(queued)
-                            cli_ui.print_success(
-                                f"Queued follow-up ({followups.size()})."
-                            )
-                    input_task = None
-                    if collect_input and agent_task not in done:
-                        input_task = asyncio.create_task(
-                            prompt.prompt_async(
-                                [("class:prompt", "follow-up> ")]
-                            )
-                        )
-
-                if modal_task in done:
-                    request = modal_task.result()
-                    if input_task is not None:
-                        draft = _prompt_buffer_text(prompt)
-                        await _cancel_prompt_task(input_task)
-                        input_task = None
-                    try:
-                        answer = await prompt.prompt_async(request.message)
-                    except (KeyboardInterrupt, EOFError):
-                        answer = ""
-                    if not request.result.done():
-                        request.result.set_result(answer)
-                    modal_task = asyncio.create_task(broker.next_request())
-                    if collect_input and agent_task not in done:
-                        input_task = asyncio.create_task(
-                            prompt.prompt_async(
-                                [("class:prompt", "follow-up> ")],
-                                default=draft,
-                            )
-                        )
-                        draft = ""
-                    continue
-
-                if agent_task in done:
-                    if input_task is not None:
-                        draft = _prompt_buffer_text(prompt)
-                        await _cancel_prompt_task(input_task)
-                    modal_task.cancel()
-                    await _cancel_prompt_task(modal_task)
-                    response, new_messages, title_user_message = agent_task.result()
-                    _finish_agent_turn(
-                        response=response,
-                        new_messages=new_messages,
-                        title_user_message=title_user_message,
+        with stdout_context:
+            while current_message is not None:
+                cli_ui.set_render_markdown(_render_markdown_enabled(agent))
+                cli_ui.begin_assistant_response()
+                agent_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        _execute_agent_turn,
+                        message=current_message,
                         agent=agent,
                         active_session_id=active_session_id,
                         active_history=active_history,
+                        prompt=prompt,
                         cli_ui=cli_ui,
-                        pending_title_threads=pending_title_threads,
-                        save_message_fn=save_message_fn,
-                        rewrite_session_fn=rewrite_session_fn,
-                        archive_session_fn=archive_session_fn,
-                        load_session_meta_fn=load_session_meta_fn,
+                        input_reader=broker.ask_from_worker,
                     )
-                    current_message = followups.pop()
-                    if current_message is not None:
-                        cli_ui.print_success("Running queued follow-up.")
-                    break
+                )
+                input_task: Optional[asyncio.Task] = asyncio.create_task(
+                    prompt.prompt_async(
+                        [("class:prompt", "follow-up> ")],
+                        default=draft,
+                        **prompt_kwargs,
+                    )
+                )
+                draft = ""
+                modal_task: asyncio.Task = asyncio.create_task(broker.next_request())
+                collect_input = True
+
+                while True:
+                    wait_for = {agent_task, modal_task}
+                    if input_task is not None:
+                        wait_for.add(input_task)
+                    done, _ = await asyncio.wait(
+                        wait_for,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    if input_task is not None and input_task in done:
+                        try:
+                            queued = input_task.result().strip()
+                        except (KeyboardInterrupt, EOFError):
+                            collect_input = False
+                        else:
+                            if queued.startswith("/"):
+                                cli_ui.print_warning(
+                                    "Slash commands cannot be queued while Astra is working."
+                                )
+                            elif queued:
+                                followups.put(queued)
+                                cli_ui.print_success(
+                                    f"Queued follow-up ({followups.size()})."
+                                )
+                        input_task = None
+                        if collect_input and agent_task not in done:
+                            input_task = asyncio.create_task(
+                                prompt.prompt_async(
+                                    [("class:prompt", "follow-up> ")],
+                                    **prompt_kwargs,
+                                )
+                            )
+
+                    if modal_task in done:
+                        request = modal_task.result()
+                        if input_task is not None:
+                            draft = _prompt_buffer_text(prompt)
+                            await _cancel_prompt_task(input_task)
+                            input_task = None
+                        try:
+                            answer = await prompt.prompt_async(
+                                request.message,
+                                **prompt_kwargs,
+                            )
+                        except (KeyboardInterrupt, EOFError):
+                            answer = ""
+                        if not request.result.done():
+                            request.result.set_result(answer)
+                        modal_task = asyncio.create_task(broker.next_request())
+                        if collect_input and agent_task not in done:
+                            input_task = asyncio.create_task(
+                                prompt.prompt_async(
+                                    [("class:prompt", "follow-up> ")],
+                                    default=draft,
+                                    **prompt_kwargs,
+                                )
+                            )
+                            draft = ""
+                        continue
+
+                    if agent_task in done:
+                        if input_task is not None:
+                            draft = _prompt_buffer_text(prompt)
+                            await _cancel_prompt_task(input_task)
+                        modal_task.cancel()
+                        await _cancel_prompt_task(modal_task)
+                        response, new_messages, title_user_message = agent_task.result()
+                        _finish_agent_turn(
+                            response=response,
+                            new_messages=new_messages,
+                            title_user_message=title_user_message,
+                            agent=agent,
+                            active_session_id=active_session_id,
+                            active_history=active_history,
+                            cli_ui=cli_ui,
+                            pending_title_threads=pending_title_threads,
+                            save_message_fn=save_message_fn,
+                            rewrite_session_fn=rewrite_session_fn,
+                            archive_session_fn=archive_session_fn,
+                            load_session_meta_fn=load_session_meta_fn,
+                        )
+                        current_message = followups.pop()
+                        if current_message is not None:
+                            cli_ui.print_success("Running queued follow-up.")
+                        break
     finally:
+        cli_ui.set_prompt_owned_live_rendering(False)
         broker.close()
         if _confirm_edits_enabled(agent):
             set_write_approval_callback(

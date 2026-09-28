@@ -141,3 +141,37 @@ def test_set_heartbeat_label_updates_label():
         assert ui._hb_label == "running write_file"
     finally:
         ui.stop_thinking()
+
+
+def test_prompt_owned_rendering_keeps_heartbeat_state_without_rich_status():
+    ui = _quiet_ui()
+    ui.set_prompt_owned_live_rendering(True)
+
+    ui.start_thinking("thinking")
+    ui.bump_tool()
+    ui.bump_tokens(120)
+
+    assert ui._status is None
+    assert ui._hb_thread is None
+    assert "thinking" in ui.heartbeat_text()
+    assert "1 tool" in ui.heartbeat_text()
+    assert "~120 tok" in ui.heartbeat_text()
+    assert ui.get_heartbeat_snapshot()["in_progress"] is True
+
+    ui.pause_thinking()
+    assert ui.heartbeat_text() == ""
+    assert ui.get_heartbeat_snapshot()["in_progress"] is False
+
+
+def test_prompt_owned_rendering_stops_existing_rich_status_without_resetting():
+    ui = _quiet_ui()
+    ui.start_thinking("thinking")
+    ui.bump_tool()
+
+    ui.set_prompt_owned_live_rendering(True)
+
+    assert ui._status is None
+    assert ui._hb_thread is None
+    assert ui._hb_tools == 1
+    assert ui.heartbeat_text().startswith("thinking · 1 tool")
+    ui.stop_thinking()

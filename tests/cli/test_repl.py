@@ -44,8 +44,10 @@ class AsyncFollowUpPromptSession(FakePromptSession):
         self.started = started
         self.release = release
         self.followup_sent = False
+        self.async_prompt_kwargs = []
 
     async def prompt_async(self, message, **kwargs):
+        self.async_prompt_kwargs.append(kwargs)
         text = _prompt_text(message)
         if text.startswith("follow-up>") and not self.followup_sent:
             while not self.started.is_set():
@@ -231,6 +233,10 @@ def test_followup_is_queued_while_agent_runs_then_processed():
     ]
     assert "Queued follow-up (1)." in output.getvalue()
     assert "Running queued follow-up." in output.getvalue()
+    assert prompt.async_prompt_kwargs
+    assert all(call["refresh_interval"] == 0.5 for call in prompt.async_prompt_kwargs)
+    assert all(call["bottom_toolbar"] == ui.heartbeat_text for call in prompt.async_prompt_kwargs)
+    assert ui._prompt_owns_live_rendering is False
 
 
 def test_followup_prompt_yields_to_write_approval():
@@ -266,6 +272,44 @@ def test_followup_prompt_yields_to_clarify_question():
     assert agent.answer == "first"
     assert len(agent.calls) == 1
     assert "Choose one" in output.getvalue()
+
+
+def test_patch_stdout_preserves_ansi_and_async_context_starts_inside_event_loop():
+    calls = []
+
+    class FakeStdoutContext:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    def fake_patch_stdout(*, raw=False):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop_running = False
+        else:
+            loop_running = True
+        calls.append((raw, loop_running))
+        return FakeStdoutContext()
+
+    agent = FakeAgent()
+    prompt = AsyncApprovalPromptSession(["start", "/exit"])
+    ui, _ = _ui_and_output()
+
+    with patch("astra_claw.cli.repl.patch_stdout", side_effect=fake_patch_stdout):
+        run_interactive_repl(
+            agent=agent,
+            session_id="session-1",
+            prompt_session=prompt,
+            ui=ui,
+            patch_stdout_enabled=True,
+        )
+
+    assert calls
+    assert all(raw is True for raw, _ in calls)
+    assert (True, True) in calls
 
 
 def test_prompt_context_refs_are_expanded_before_agent_call(tmp_path, monkeypatch):
