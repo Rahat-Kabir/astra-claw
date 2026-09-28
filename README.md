@@ -61,6 +61,7 @@ It is not designed as:
 - Preview-and-approve edits: `write_file`/`patch` show a colored diff and ask before writing (`y`/`n`/`a`); reject tells the model to re-plan. Toggle with `cli.confirm_edits` (default on)
 - `/undo` reverts the last approved file edit: restores the pre-write content (or deletes a file the agent created) and skips the undo if you hand-edited the file afterwards
 - Queued follow-ups: while Astra is working, type at `follow-up>` to queue another user turn; prompt_toolkit owns the live prompt and heartbeat so Windows terminals do not expose raw ANSI control codes
+- Safe steering: type `/steer <message>` (or `/steering <message>`) at `follow-up>` to redirect a long task after its current tool batch; autocomplete, `/help`, and the live toolbar expose queued/applied state
 - Optional Markdown rendering for assistant replies via `cli.render_markdown` (buffers during the turn, prints formatted bold/lists/headings when the turn ends; session JSONL still stores raw text)
 - Workspace fence: `--workspace <path>` locks `write_file` and `patch` to a single directory tree for safe sandbox testing
 - Live CLI feedback: heartbeat spinner with elapsed time, tool count, and rough token estimate (e.g. `thinking · 4 tools · 1m42s · ~3.2k tok`), one compact line per tool call with result summary (line counts, `+N -M` diff deltas, shell exit codes), errors in red
@@ -155,7 +156,7 @@ Hello! How can I help you?
 
 Built-in local commands: `/help`, `/sessions`, `/new`, `/compact`, `/usage`, `/model`, `/retry`, `/skills`, `/skill`, `/exit`, `/quit`.
 
-While Astra is working, the prompt changes to `follow-up>`. Entering text there queues another turn without interrupting the current one. Slash commands are not queued; write approvals and `clarify` questions temporarily replace the follow-up prompt, then collection resumes. During this prompt, prompt_toolkit renders the heartbeat in its bottom toolbar; Rich resumes normal output after prompt ownership ends.
+While Astra is working, the prompt changes to `follow-up>`. Entering ordinary text there queues another turn without interrupting the current one. Enter `/steer <message>` (alias: `/steering`) to redirect the active turn after its current tool batch; the bottom toolbar changes from `steering queued` to `steering applied`. If the turn finishes before that safe boundary, Astra preserves the message as the next turn instead of losing it. Using the command while idle explains that it belongs at the busy prompt. Other slash commands are rejected while busy. Write approvals and `clarify` questions temporarily replace the follow-up prompt, then collection resumes. During this prompt, prompt_toolkit renders the heartbeat in its bottom toolbar; Rich resumes normal output after prompt ownership ends.
 
 Attach local context inline:
 
@@ -241,7 +242,7 @@ astra-claw/
 |   |   |-- context_refs.py   # inline @file/@folder/@diff/@session expansion
 |   |   |-- context_completion.py # fuzzy tab completion for context refs
 |   |   |-- image_attachments.py # ordinary-path image detection + multimodal encoding
-|   |   |-- followup.py       # FIFO follow-up queue + worker-to-REPL prompt broker
+|   |   |-- followup.py       # FIFO follow-up/steering queues + worker-to-REPL prompt broker
 |   |   |-- repl.py           # prompt_toolkit interactive loop + AgentEvents wiring
 |   |   |-- setup.py          # interactive setup wizard (provider, key, model)
 |   |   |-- skills.py         # markdown skill discovery + invocation message builder

@@ -175,3 +175,21 @@ def test_prompt_owned_rendering_stops_existing_rich_status_without_resetting():
     assert ui._hb_tools == 1
     assert ui.heartbeat_text().startswith("thinking · 1 tool")
     ui.stop_thinking()
+
+
+def test_steering_status_stays_visible_when_heartbeat_is_paused():
+    ui = _quiet_ui()
+
+    ui.set_steering_status("steering queued (1)")
+    assert ui.heartbeat_text() == "steering queued (1)"
+
+    ui.start_thinking("thinking")
+    assert "thinking" in ui.heartbeat_text()
+    assert "steering queued (1)" in ui.heartbeat_text()
+
+    ui.pause_thinking()
+    ui.set_steering_status("steering applied")
+    assert ui.heartbeat_text() == "steering applied"
+
+    ui.set_steering_status("")
+    assert ui.heartbeat_text() == ""

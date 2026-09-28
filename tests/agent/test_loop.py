@@ -254,6 +254,50 @@ class TestAstraAgentLoop:
             {"role": "assistant", "content": "Done reading file."},
         ]
 
+    def test_run_conversation_injects_one_steering_message_after_tool_batch(self):
+        tool_call_stream = [
+            FakeChunk(
+                FakeDelta(
+                    tool_calls=[
+                        FakeToolCallDelta(
+                            index=0,
+                            call_id="call_steer",
+                            function=FakeFunction(
+                                name="read_file",
+                                arguments='{"path": "README.md"}',
+                            ),
+                        )
+                    ]
+                )
+            )
+        ]
+        final_text_stream = [FakeChunk(FakeDelta(content="Changed direction."))]
+        client = FakeClient([tool_call_stream, final_text_stream])
+        steering = iter(["stop editing and run tests first"])
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
+            with patch("astra_claw.agent.loop.create_client", return_value=client):
+                with patch(
+                    "astra_claw.agent.loop.registry.dispatch",
+                    return_value='{"path": "README.md", "content": "example"}',
+                ):
+                    agent = AstraAgent()
+                    text, new_messages = agent.run_conversation(
+                        "inspect the project",
+                        steering_reader=lambda: next(steering),
+                    )
+
+        steering_message = {
+            "role": "user",
+            "content": "[steering]\nstop editing and run tests first",
+        }
+        assert text == "Changed direction."
+        assert new_messages[-2:] == [
+            steering_message,
+            {"role": "assistant", "content": "Changed direction."},
+        ]
+        assert client.chat.completions.calls[1]["messages"][-1] == steering_message
+
     def test_run_conversation_threads_current_session_id_into_tool_runner(self):
         tool_call_stream = [
             FakeChunk(

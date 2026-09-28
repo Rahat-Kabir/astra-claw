@@ -23,6 +23,7 @@ def test_command_registry_contains_core_commands():
         "/model",
         "/retry",
         "/undo",
+        "/steer",
         "/skills",
         "/skill",
         "/exit",
@@ -34,6 +35,13 @@ def test_quit_alias_resolves_to_exit():
 
     assert command is not None
     assert command.name == "/exit"
+
+
+def test_steering_alias_resolves_to_steer():
+    command = resolve_command("/steering change direction")
+
+    assert command is not None
+    assert command.name == "/steer"
 
 
 def test_slash_completer_suggests_matching_commands():
@@ -64,6 +72,7 @@ def test_slash_completer_suggests_installed_skill_aliases():
 
 def test_slash_completer_includes_aliases():
     assert "/quit" in _completion_texts("/qu")
+    assert "/steering" in _completion_texts("/steeri")
 
 
 def test_slash_completer_ignores_normal_text():

@@ -47,6 +47,7 @@ class CliUI:
         self._hb_label: str = "thinking"
         self._hb_active: bool = False
         self._prompt_owns_live_rendering: bool = False
+        self._steering_status: str = ""
         self._hb_stop: threading.Event = threading.Event()
         self._hb_thread: Optional[threading.Thread] = None
 
@@ -275,9 +276,14 @@ class CliUI:
 
     def heartbeat_text(self) -> str:
         """Plain live status for prompt_toolkit's bottom toolbar."""
-        if not self._hb_active:
-            return ""
-        return " · ".join(self._heartbeat_parts())
+        parts = self._heartbeat_parts() if self._hb_active else []
+        if self._steering_status:
+            parts.append(self._steering_status)
+        return " · ".join(parts)
+
+    def set_steering_status(self, status: str) -> None:
+        """Set the busy-prompt steering state shown by prompt_toolkit."""
+        self._steering_status = str(status or "")
 
     def stop_thinking(self) -> None:
         """Hide the spinner and reset heartbeat state. Safe to call repeatedly."""

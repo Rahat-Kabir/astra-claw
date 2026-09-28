@@ -276,6 +276,7 @@ class AstraAgent:
         events: Optional[AgentEvents] = None,
         clarify_callback: Optional[Callable[[str, Optional[List[str]]], str]] = None,
         current_session_id: Optional[str] = None,
+        steering_reader: Optional[Callable[[], Optional[str]]] = None,
     ) -> tuple:
         """Run a conversation with tool calling until completion.
 
@@ -352,6 +353,15 @@ class AstraAgent:
             )
             history_messages.extend(tool_messages)
             new_messages.extend(tool_messages)
+
+            steering_message = steering_reader() if steering_reader is not None else None
+            if steering_message:
+                steering_msg = {
+                    "role": "user",
+                    "content": f"[steering]\n{steering_message}",
+                }
+                history_messages.append(steering_msg)
+                new_messages.append(steering_msg)
 
         self.last_replay_history = list(history_messages)
         return "Max turns reached. Agent stopped.", new_messages

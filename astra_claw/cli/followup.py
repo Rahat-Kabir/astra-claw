@@ -29,6 +29,25 @@ class FollowUpQueue:
         return self._items.qsize()
 
 
+class SteeringQueue:
+    """FIFO queue for messages injected at the next safe agent-loop boundary."""
+
+    def __init__(self) -> None:
+        self._items: Queue[str] = Queue()
+
+    def put(self, message: str) -> None:
+        self._items.put(message)
+
+    def pop(self) -> str | None:
+        try:
+            return self._items.get_nowait()
+        except Empty:
+            return None
+
+    def size(self) -> int:
+        return self._items.qsize()
+
+
 @dataclass
 class PromptRequest:
     """A worker-thread request for exclusive terminal input."""

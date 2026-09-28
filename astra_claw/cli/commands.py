@@ -26,6 +26,11 @@ COMMANDS: tuple[CommandDef, ...] = (
     CommandDef("/model", "Show or switch the active model"),
     CommandDef("/retry", "Redo the last turn with the same prompt"),
     CommandDef("/undo", "Revert the last approved file edit"),
+    CommandDef(
+        "/steer",
+        "Redirect the active turn after its current tool batch",
+        aliases=("/steering",),
+    ),
     CommandDef("/skills", "List installed skills"),
     CommandDef("/skill", "Invoke a skill for one turn"),
     CommandDef("/exit", "Exit Astra-Claw", aliases=("/quit",)),

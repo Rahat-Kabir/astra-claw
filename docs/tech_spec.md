@@ -209,7 +209,14 @@ Final Response
 - The async runner enters `patch_stdout(raw=True)` after the event loop starts. Raw mode preserves Rich ANSI sequences instead of sanitizing the escape byte into visible `?`; prompt_toolkit is the sole live renderer and refreshes its heartbeat toolbar every 0.5 seconds, avoiding cursor collisions with Rich `Status`.
 - `cli/followup.py::FollowUpQueue` stores submitted text in thread-safe FIFO order. After the current turn is rendered and persisted, the REPL pops one message, passes the completed history into the next `run_conversation()` call, and continues collecting more follow-ups.
 - `PromptBroker` bridges synchronous worker callbacks back to the main input loop. A write approval or `clarify` question cancels the active follow-up prompt, receives exclusive terminal input, resolves the worker's `Future`, and then restores any partially typed follow-up draft.
-- Slash commands are rejected while a turn is running; they remain local idle-REPL operations. Follow-ups do not interrupt an in-flight model stream or tool batch - that separate behavior is steering and remains out of scope.
+- Slash commands other than `/steer` are rejected while a turn is running; they remain local idle-REPL operations. Ordinary follow-ups never alter the active turn.
+
+### Safe Mid-run Steering
+
+- `cli/followup.py::SteeringQueue` is a thread-safe FIFO separate from `FollowUpQueue`. At the busy `follow-up>` prompt, only explicit `/steer <message>` (or `/steering <message>`) enters it; ordinary text retains next-turn semantics and other slash commands remain rejected. The canonical command and alias live in `cli/commands.py`, so completion and `/help` expose them; idle use prints a busy-only warning instead of reaching the model.
+- `_execute_agent_turn()` passes `steering.pop` into `AstraAgent.run_conversation()` as the optional `steering_reader` callback. `agent/loop.py` polls once after a whole tool-call batch completes, appends `{"role": "user", "content": "[steering]\\n..."}` to both replay history and `new_messages`, then the next model request sees the redirected instruction.
+- Steering is cooperative, not forceful cancellation: an active model stream, shell command, write, or multi-tool batch is never killed halfway through. One message is consumed per safe boundary. If the agent finishes naturally before polling, the REPL pops the undelivered steering message before ordinary follow-ups and runs it as the next user turn, so timing races do not lose input.
+- The prompt_toolkit bottom toolbar is the steering acknowledgement channel: enqueue sets `steering queued (N)`, the worker-side reader sets `steering applied` when the agent loop consumes a message, and late fallback shows `steering running as next turn`. `CliUI.heartbeat_text()` keeps this state visible even when streamed assistant output pauses the normal heartbeat.
 
 ### Memory System
 

@@ -72,6 +72,38 @@ class AsyncClarifyPromptSession(FakePromptSession):
         await asyncio.Future()
 
 
+class AsyncSteeringPromptSession(FakePromptSession):
+    def __init__(self, prompts, *, started):
+        super().__init__(prompts)
+        self.started = started
+        self.steering_sent = False
+
+    async def prompt_async(self, message, **kwargs):
+        text = _prompt_text(message)
+        if text.startswith("follow-up>") and not self.steering_sent:
+            while not self.started.is_set():
+                await asyncio.sleep(0.001)
+            self.steering_sent = True
+            return "/steering stop editing and run tests first"
+        await asyncio.Future()
+
+
+class AsyncLateSteeringPromptSession(FakePromptSession):
+    def __init__(self, prompts, *, finishing):
+        super().__init__(prompts)
+        self.finishing = finishing
+        self.steering_sent = False
+
+    async def prompt_async(self, message, **kwargs):
+        text = _prompt_text(message)
+        if text.startswith("follow-up>") and not self.steering_sent:
+            while not self.finishing.is_set():
+                await asyncio.sleep(0.001)
+            self.steering_sent = True
+            return "/steer run tests before finishing"
+        await asyncio.Future()
+
+
 class FakeAgent:
     def __init__(self):
         self.config = {"cli": {"render_markdown": False}}
@@ -90,6 +122,7 @@ class FakeAgent:
         events=None,
         clarify_callback=None,
         current_session_id=None,
+        steering_reader=None,
     ):
         history = list(conversation_history or [])
         self.calls.append({
@@ -99,6 +132,7 @@ class FakeAgent:
             "events": events,
             "clarify_callback": clarify_callback,
             "current_session_id": current_session_id,
+            "steering_reader": steering_reader,
         })
         if stream_writer is not None:
             stream_writer("assistant response")
@@ -165,6 +199,46 @@ class ClarifyAgent(FakeAgent):
     def run_conversation(self, *args, **kwargs):
         clarify_callback = kwargs.get("clarify_callback")
         self.answer = clarify_callback("Choose one", ["first", "second"])
+        return super().run_conversation(*args, **kwargs)
+
+
+class SteeringAgent(FakeAgent):
+    def __init__(self, started):
+        super().__init__()
+        self.started = started
+        self.steering_message = None
+
+    def run_conversation(self, message, conversation_history=None, **kwargs):
+        steering_reader = kwargs["steering_reader"]
+        self.calls.append({"message": message})
+        self.started.set()
+        for _ in range(200):
+            self.steering_message = steering_reader()
+            if self.steering_message is not None:
+                break
+            threading.Event().wait(0.005)
+        assert self.steering_message is not None
+        new_messages = [
+            {"role": "user", "content": message},
+            {
+                "role": "user",
+                "content": f"[steering]\n{self.steering_message}",
+            },
+            {"role": "assistant", "content": "redirected"},
+        ]
+        self.last_replay_history = list(conversation_history or []) + new_messages
+        return "redirected", new_messages
+
+
+class UnconsumedSteeringAgent(FakeAgent):
+    def __init__(self, finishing):
+        super().__init__()
+        self.finishing = finishing
+
+    def run_conversation(self, *args, **kwargs):
+        if not self.calls:
+            self.finishing.set()
+            threading.Event().wait(0.02)
         return super().run_conversation(*args, **kwargs)
 
 
@@ -272,6 +346,87 @@ def test_followup_prompt_yields_to_clarify_question():
     assert agent.answer == "first"
     assert len(agent.calls) == 1
     assert "Choose one" in output.getvalue()
+
+
+def test_explicit_steer_is_delivered_inside_the_active_agent_turn():
+    started = threading.Event()
+    agent = SteeringAgent(started)
+    prompt = AsyncSteeringPromptSession(["start", "/exit"], started=started)
+    saved = []
+    ui, output = _ui_and_output()
+    steering_states = []
+    original_set_steering_status = ui.set_steering_status
+
+    def record_steering_status(status):
+        steering_states.append(status)
+        original_set_steering_status(status)
+
+    ui.set_steering_status = record_steering_status
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=prompt,
+        ui=ui,
+        save_message_fn=lambda session_id, message: saved.append((session_id, message)),
+        patch_stdout_enabled=False,
+    )
+
+    assert len(agent.calls) == 1
+    assert agent.steering_message == "stop editing and run tests first"
+    assert [message["content"] for _, message in saved] == [
+        "start",
+        "[steering]\nstop editing and run tests first",
+        "redirected",
+    ]
+    assert "Queued steering (1)." in output.getvalue()
+    assert "steering queued (1)" in steering_states
+    assert "steering applied" in steering_states
+    assert steering_states.index("steering queued (1)") < steering_states.index(
+        "steering applied"
+    )
+
+
+def test_steer_at_idle_shows_busy_only_warning_and_skips_agent():
+    agent = FakeAgent()
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=FakePromptSession(
+            ["/steering change direction", "/exit"]
+        ),
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert agent.calls == []
+    assert "Steering is available only while Astra is working." in output.getvalue()
+
+
+def test_steering_missed_by_final_boundary_runs_as_next_turn():
+    finishing = threading.Event()
+    agent = UnconsumedSteeringAgent(finishing)
+    prompt = AsyncLateSteeringPromptSession(
+        ["start", "/exit"],
+        finishing=finishing,
+    )
+    ui, output = _ui_and_output()
+
+    run_interactive_repl(
+        agent=agent,
+        session_id="session-1",
+        prompt_session=prompt,
+        ui=ui,
+        patch_stdout_enabled=False,
+    )
+
+    assert [call["message"] for call in agent.calls] == [
+        "start",
+        "run tests before finishing",
+    ]
+    assert "Running undelivered steering as the next turn." in output.getvalue()
 
 
 def test_patch_stdout_preserves_ansi_and_async_context_starts_inside_event_loop():

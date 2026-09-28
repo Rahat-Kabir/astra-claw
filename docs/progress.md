@@ -539,6 +539,22 @@ Why: Rich's live spinner and prompt_toolkit's async follow-up prompt both contro
 - [x] Verified focused CLI suite: `.\venv\Scripts\python.exe -m pytest tests\cli\test_ui_heartbeat.py tests\cli\test_followup.py tests\cli\test_repl.py -q` -> 48 passed
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 510 passed
 
+## v0.3.7 - Safe Mid-run Steering (2026-09-28)
+
+Why: queued follow-ups could line up future work, but a user could not redirect a long tool-using turn until the entire run ended.
+
+### Completed
+
+- [x] `astra_claw/cli/followup.py` - separate thread-safe FIFO `SteeringQueue`
+- [x] `astra_claw/cli/repl.py` - explicit busy-time `/steer <message>` routing; ordinary input remains a follow-up and other slash commands remain blocked
+- [x] `astra_claw/agent/loop.py` - optional `steering_reader` injects one persisted `[steering]` user message after each completed tool batch and before the next model request
+- [x] Race safety: steering that arrives after the final safe boundary is preserved as the next turn instead of being dropped
+- [x] Cooperative boundary: active model streams, commands, writes, and tool batches finish normally; forceful cancellation remains intentionally unbuilt
+- [x] `tests/cli/test_followup.py`, `tests/cli/test_repl.py`, and `tests/agent/test_loop.py` - queue FIFO, active-turn delivery, persisted message ordering, and next-request context
+- [x] Steering UX - `/steer` added to help/completion with `/steering` alias; idle use explains the busy-only boundary; prompt toolbar shows queued/applied state even while heartbeat animation is paused
+- [x] Verified focused command/UI/steering suite: `.\venv\Scripts\python.exe -m pytest tests\cli\test_commands.py tests\cli\test_ui_heartbeat.py tests\cli\test_followup.py tests\cli\test_repl.py tests\agent\test_loop.py -q` -> 80 passed
+- [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 517 passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

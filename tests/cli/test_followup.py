@@ -1,6 +1,6 @@
 import asyncio
 
-from astra_claw.cli.followup import FollowUpQueue, PromptBroker
+from astra_claw.cli.followup import FollowUpQueue, PromptBroker, SteeringQueue
 
 
 def test_followup_queue_is_fifo():
@@ -12,6 +12,18 @@ def test_followup_queue_is_fifo():
     assert queue.size() == 2
     assert queue.pop() == "first"
     assert queue.pop() == "second"
+    assert queue.pop() is None
+
+
+def test_steering_queue_is_fifo():
+    queue = SteeringQueue()
+
+    queue.put("stop editing")
+    queue.put("run tests first")
+
+    assert queue.size() == 2
+    assert queue.pop() == "stop editing"
+    assert queue.pop() == "run tests first"
     assert queue.pop() is None
 
 

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any, Callable, List, Optional
 
 from prompt_toolkit import PromptSession
@@ -28,7 +29,7 @@ from ..session import (
 from ..tools.path_safety import clear_undo, set_write_approval_callback, undo_last_write
 from .commands import resolve_command, parse_model_arg, AstraCompleter
 from .context_refs import expand_context_references
-from .followup import FollowUpQueue, PromptBroker
+from .followup import FollowUpQueue, PromptBroker, SteeringQueue
 from .history_edit import truncate_for_retry
 from .image_attachments import prepare_image_prompt
 from .skills import build_skill_invocation_message, list_skills, resolve_skill_command
@@ -320,6 +321,11 @@ def _run_loop(
                     )
                 else:
                     cli_ui.print_error(f"Undo failed: {result.detail}")
+            elif command.name == "/steer":
+                cli_ui.print_warning(
+                    "Steering is available only while Astra is working. "
+                    "Use /steer <message> at the follow-up prompt."
+                )
             elif command.name == "/skills":
                 cli_ui.print_skills(list_skills())
             elif command.name == "/skill":
@@ -397,6 +403,7 @@ def _execute_agent_turn(
     prompt,
     cli_ui,
     input_reader=None,
+    steering_reader=None,
 ):
     """Prepare and execute one agent turn; safe to run in a worker thread."""
     events = _build_agent_events(cli_ui)
@@ -427,14 +434,20 @@ def _execute_agent_turn(
         cli_ui.bump_tokens(max(1, len(token) // 4))
         cli_ui.stream_token(token)
 
+    run_kwargs = {
+        "conversation_history": active_history,
+        "stream_writer": _stream_writer,
+        "events": events,
+        "clarify_callback": clarify_callback,
+        "current_session_id": active_session_id,
+    }
+    if steering_reader is not None:
+        run_kwargs["steering_reader"] = steering_reader
+
     try:
         response, new_messages = agent.run_conversation(
             user_content,
-            conversation_history=active_history,
-            stream_writer=_stream_writer,
-            events=events,
-            clarify_callback=clarify_callback,
-            current_session_id=active_session_id,
+            **run_kwargs,
         )
     finally:
         cli_ui.stop_thinking()
@@ -573,6 +586,8 @@ async def _run_turns_with_followups(
     loop = asyncio.get_running_loop()
     broker = PromptBroker(loop)
     followups = FollowUpQueue()
+    steering = SteeringQueue()
+    steering_status_lock = Lock()
     draft = ""
 
     if _confirm_edits_enabled(agent):
@@ -586,6 +601,23 @@ async def _run_turns_with_followups(
         )
 
     current_message = initial_message
+
+    def _queue_steering(message: str) -> int:
+        with steering_status_lock:
+            steering.put(message)
+            queued = steering.size()
+            cli_ui.set_steering_status(f"steering queued ({queued})")
+            return queued
+
+    def _read_steering() -> str | None:
+        with steering_status_lock:
+            message = steering.pop()
+            if message is not None:
+                remaining = steering.size()
+                suffix = f" ({remaining} queued)" if remaining else ""
+                cli_ui.set_steering_status(f"steering applied{suffix}")
+            return message
+
     prompt_kwargs = {
         "bottom_toolbar": cli_ui.heartbeat_text,
         "refresh_interval": 0.5,
@@ -607,6 +639,7 @@ async def _run_turns_with_followups(
                         prompt=prompt,
                         cli_ui=cli_ui,
                         input_reader=broker.ask_from_worker,
+                        steering_reader=_read_steering,
                     )
                 )
                 input_task: Optional[asyncio.Task] = asyncio.create_task(
@@ -635,7 +668,19 @@ async def _run_turns_with_followups(
                         except (KeyboardInterrupt, EOFError):
                             collect_input = False
                         else:
-                            if queued.startswith("/"):
+                            busy_command = resolve_command(queued)
+                            if busy_command is not None and busy_command.name == "/steer":
+                                parts = queued.split(maxsplit=1)
+                                if len(parts) == 1 or not parts[1].strip():
+                                    cli_ui.print_warning(
+                                        "Usage: /steer <message>"
+                                    )
+                                else:
+                                    queued_count = _queue_steering(parts[1].strip())
+                                    cli_ui.print_success(
+                                        f"Queued steering ({queued_count})."
+                                    )
+                            elif queued.startswith("/"):
                                 cli_ui.print_warning(
                                     "Slash commands cannot be queued while Astra is working."
                                 )
@@ -701,11 +746,21 @@ async def _run_turns_with_followups(
                             archive_session_fn=archive_session_fn,
                             load_session_meta_fn=load_session_meta_fn,
                         )
-                        current_message = followups.pop()
-                        if current_message is not None:
+                        current_message = steering.pop()
+                        steering_fallback = current_message is not None
+                        if steering_fallback:
+                            cli_ui.set_steering_status("steering running as next turn")
+                            cli_ui.print_success(
+                                "Running undelivered steering as the next turn."
+                            )
+                        else:
+                            current_message = followups.pop()
+                            cli_ui.set_steering_status("")
+                        if current_message is not None and not steering_fallback:
                             cli_ui.print_success("Running queued follow-up.")
                         break
     finally:
+        cli_ui.set_steering_status("")
         cli_ui.set_prompt_owned_live_rendering(False)
         broker.close()
         if _confirm_edits_enabled(agent):
