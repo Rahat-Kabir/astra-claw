@@ -9,11 +9,13 @@ Orchestrates the conversation:
 """
 
 import json
+from uuid import uuid4
 from typing import Any, Callable, Dict, List, Optional
 
 from ..config import load_config
 from ..llm import build_route, create_client, is_failover_worthy_error, resolve_api_key
 from ..memory import MemoryStore
+from ..usage_ledger import mark_run_status, tracked_run
 from .context_compactor import CompactionConfig, CompactionOutcome, ContextCompactor
 from .events import AgentEvents
 from .prompt_builder import build_system_prompt
@@ -96,6 +98,7 @@ class AstraAgent:
         self.compression_enabled = compression_config.get("enabled", True)
         self.last_compaction_outcome: Optional[CompactionOutcome] = None
         self.last_replay_history: List[Dict[str, Any]] = []
+        self.last_usage_run = None
 
     def _get_client(self, provider: str) -> Any:
         if provider not in self._clients:
@@ -130,6 +133,7 @@ class AstraAgent:
         stream_writer: Optional[Callable[[str], None]] = None,
         on_thinking: Optional[Callable[[bool], None]] = None,
         routes: Optional[List[Dict[str, str]]] = None,
+        purpose: Optional[str] = None,
     ) -> tuple[str, Optional[List[Dict[str, Any]]]]:
         """Run one streamed completion with optional fallback between routes."""
         active_routes = list(routes) if routes is not None else [self.primary_route]
@@ -137,6 +141,7 @@ class AstraAgent:
             active_routes.append(self.fallback_route)
 
         last_error: Optional[Exception] = None
+        operation_id = uuid4().hex
         for route_index, route in enumerate(active_routes):
             try:
                 client = self._get_client(route["provider"])
@@ -147,6 +152,10 @@ class AstraAgent:
                     tools=tools,
                     stream_writer=stream_writer,
                     on_thinking=on_thinking,
+                    purpose=purpose or ("delegate" if self.system_prompt_override is not None else "conversation"),
+                    attempt=route_index + 1,
+                    operation_id=operation_id,
+                    max_completion_tokens=self._model_config.get("max_completion_tokens"),
                 )
                 return full_content, tool_calls_list
             except Exception as exc:
@@ -206,6 +215,7 @@ class AstraAgent:
             stream_writer=lambda _token: None,
             on_thinking=None,
             routes=routes,
+            purpose="compaction",
         )
         return summary_text.strip()
 
@@ -239,11 +249,13 @@ class AstraAgent:
             return messages, outcome
         return history, None
 
+    @tracked_run("manual_compaction")
     def compact_history(
         self,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
         *,
         force: bool = True,
+        current_session_id: Optional[str] = None,
     ) -> CompactionOutcome:
         history = list(conversation_history) if conversation_history else []
         compacted_history, outcome = self._maybe_compact_history(history, force=force)
@@ -267,6 +279,7 @@ class AstraAgent:
         self.last_replay_history = list(outcome.messages)
         return outcome
 
+    @tracked_run("conversation")
     def run_conversation(
         self,
         user_message: Any,
@@ -364,6 +377,7 @@ class AstraAgent:
                 new_messages.append(steering_msg)
 
         self.last_replay_history = list(history_messages)
+        mark_run_status("max_turns")
         return "Max turns reached. Agent stopped.", new_messages
 
 

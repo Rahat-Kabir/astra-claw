@@ -1,9 +1,11 @@
 """LLM provider helpers for Astra-Claw."""
 
 import os
+from uuid import uuid4
 from typing import Any, Dict, Optional
 
 from openai import OpenAI
+from .usage_ledger import request_scope, run_scope
 
 
 PROVIDER_BASE_URLS = {
@@ -52,7 +54,9 @@ def create_client(provider: str, api_key: Optional[str] = None) -> OpenAI:
             f"Run 'astraclaw setup' or set {env_var}."
         )
 
-    return OpenAI(base_url=base_url, api_key=key)
+    # Explicit fallback/compatibility attempts are logged individually. Hidden
+    # SDK retries would make one ledger request represent multiple HTTP attempts.
+    return OpenAI(base_url=base_url, api_key=key, max_retries=0)
 
 
 def build_route(model_config: Dict[str, Any], fallback: bool = False) -> Optional[Dict[str, str]]:
@@ -89,6 +93,8 @@ def complete_once(
     temperature: float = 0.3,
     timeout: float = 30.0,
     api_key: Optional[str] = None,
+    purpose: str = "completion",
+    session_id: Optional[str] = None,
 ) -> str:
     """Run a single non-streaming chat completion and return the text.
 
@@ -96,25 +102,22 @@ def complete_once(
     `max_completion_tokens` required by reasoning / gpt-5.x models.
     """
     client = create_client(provider, api_key=api_key)
-    try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_completion_tokens=max_tokens,
-            temperature=temperature,
-            timeout=timeout,
-        )
-    except Exception as exc:
-        if "max_completion_tokens" not in str(exc):
-            raise
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            timeout=timeout,
-        )
-    return (resp.choices[0].message.content or "").strip()
+    with run_scope(purpose, session_id=session_id):
+        operation_id = uuid4().hex
+        for attempt, token_arg in enumerate(("max_completion_tokens", "max_tokens"), 1):
+            try:
+                with request_scope(provider, model, purpose=purpose, attempt=attempt,
+                                   operation_id=operation_id) as evidence:
+                    resp = client.chat.completions.create(
+                        model=model, messages=messages, **{token_arg: max_tokens},
+                        temperature=temperature, timeout=timeout,
+                    )
+                    evidence.observe(resp)
+                break
+            except Exception as exc:
+                if attempt == 2 or "max_completion_tokens" not in str(exc):
+                    raise
+        return (resp.choices[0].message.content or "").strip()
 
 
 def validate_credentials(

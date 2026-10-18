@@ -198,7 +198,9 @@ def _run_loop(
                 active_history.clear()
                 cli_ui.print_success(f"New session: {active_session_id}")
             elif command.name == "/compact":
-                outcome = agent.compact_history(active_history, force=True)
+                outcome = agent.compact_history(
+                    active_history, force=True, current_session_id=active_session_id,
+                )
                 if not outcome.did_compact:
                     cli_ui.print_warning("Nothing to compact.")
                     continue
@@ -926,6 +928,7 @@ def _maybe_schedule_auto_title(
         model=model,
         enabled=True,
         api_key=api_key,
+        usage_run=getattr(agent, "last_usage_run", None),
     )
 
 

@@ -156,7 +156,7 @@ class FakeAgent:
             self.last_replay_history = history + new_messages
         return "assistant response", new_messages
 
-    def compact_history(self, history, force=True):
+    def compact_history(self, history, force=True, current_session_id=None):
         if self.compact_outcome is not None:
             return self.compact_outcome
         return CompactionOutcome(

@@ -13,6 +13,9 @@ python -m pytest tests -v
 ## Run Focused Tests
 
 ```bash
+python -m pytest tests/test_usage_ledger.py -v
+python -m pytest tests/test_cost.py tests/test_usage_ledger.py -v
+python -m pytest tests/test_benchmark_port.py tests/test_usage_ledger.py -v
 python -m pytest tests/test_features.py -v
 python -m pytest tests/test_soul.py tests/test_features.py -v
 python -m pytest tests/agent/test_loop.py tests/test_features.py -v
@@ -75,6 +78,11 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 
 ## Notes
 
+- `tests/test_benchmark_port.py` checks a failing baseline, a mock fix through the real agent loop, a fresh no-op run that must fail, worker timeout, checker failures, tool access policy, and incomplete usage coverage. All test model calls are synthetic. Run `python scripts/benchmark_port.py --mode live` only with authorization for the configured paid provider.
+- `tests/test_usage_ledger.py` verifies usage-only chunks, missing/partial/zero counts, stream interruption/closure, fallback and compatibility attempts, delegate/compaction/title attribution, concurrent run isolation, and ledger write failures. All calls are mocked; no billing reconciliation is claimed.
+- `tests/test_cost.py` uses real LiteLLM arithmetic and bundled OpenAI/OpenRouter prices with fixed usage. Covers cache discounts, reasoning subsets, service tiers, unknown/invalid data, ledger integration, and a fresh interpreter with network connections blocked. No provider calls or billing reconciliation.
+- GPT-5.5 cases cover 271999/272000/272001 input tokens, cached input in threshold selection, whole-request rates, output excluded from selection, dated snapshot IDs, service-tier gaps, and fixed usage from the authorized live pilot. All replay checks are offline.
+- The autouse fixture in `tests/conftest.py` isolates user data by default. Individual tests may override its temporary home.
 - Unit tests should not call live provider APIs
 - Tests that touch user data paths should use a temporary `ASTRACLAW_HOME`
 - Prefer adding focused module tests instead of growing one large catch-all file

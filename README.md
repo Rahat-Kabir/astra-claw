@@ -35,6 +35,9 @@ It is not designed as:
 ## What It Does
 
 - Conversational AI agent with a tool-calling loop
+- Local request-usage ledger: append-only JSONL evidence with run/parent IDs, provider token usage, missing-data states, request failures, and offline LiteLLM token-cost estimates with pricing snapshots
+- GPT-5.5 token estimates select short/long context rates at the verified 272,000-input-token threshold, including cache discounts and supported service-tier rates; missing rates remain unknown
+- One-task benchmark pilot: fresh port-validation fixture, independent checker, run limits, and linked usage/cost evidence; mock and live modes
 - Light Rich/prompt_toolkit CLI with history, slash commands, and autocomplete; startup banner shows the active `provider:model` route
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
 - Runs shell commands via `shell` with approval for destructive commands and package/environment mutations such as `pip install`, `uv run --with`, and `npm install`
@@ -234,6 +237,8 @@ astra-claw/
 |   |-- constants.py          # get_astraclaw_home()
 |   |-- config.py             # config loading + defaults
 |   |-- llm.py                # provider routing, client creation, fallback policy
+|   |-- usage_ledger.py       # request/run evidence, token normalization, parent linkage
+|   |-- cost.py               # offline LiteLLM token-cost estimates + pricing evidence
 |   |-- session.py            # JSONL session persistence
 |   |-- memory.py             # MemoryStore - persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding
@@ -278,7 +283,11 @@ astra-claw/
 |   |-- tools/               # tool-level tests
 |   |-- test_features.py     # core regression tests
 |   |-- test_soul.py         # SOUL.md seeding and loading tests
-|   `-- test_session.py      # session persistence tests
+|   |-- test_session.py      # session persistence tests
+|   |-- test_usage_ledger.py # mocked request accounting and missing-data checks
+|   `-- test_cost.py         # real LiteLLM calculations with fixed usage; network blocked
+|-- benchmarks/port_validation/ # prompt.md, broken fixture/ports.py, independent check.py
+|-- scripts/benchmark_port.py   # one-task runner (mock, mock-noop, live)
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
 |   |-- progress.md          # implementation progress log
@@ -299,6 +308,7 @@ User data lives in `~/.astraclaw/` by default:
 |-- sessions/
 |-- memory/
 |-- skills/
+|-- usage/                   # one append-only request/run ledger per run
 `-- logs/
 ```
 
@@ -357,6 +367,28 @@ Context compaction rewrites long interactive session transcripts after archiving
 `delegate` spawns one focused child `AstraAgent` for a self-contained subtask. The child runs in an isolated context (no parent history, no SOUL.md, no memory snapshot) and only knows the `goal` + `context` the parent passes; its final message returns to the parent as a summary, so the child's intermediate tool output never enters the parent's context window. v1 limits: one child at a time, blocking, depth 1 (children cannot delegate). The child's turn cap defaults to `delegation.max_turns` (15) and each run is saved as its own JSONL session with a `parent_id` for debugging. See `scripts/smoke_delegate.py` for an end-to-end run against the configured model.
 
 ## Testing
+
+### One-task benchmark pilot
+
+```powershell
+python scripts/benchmark_port.py --mode mock       # synthetic tool-loop smoke; no model calls
+python scripts/benchmark_port.py --mode mock-noop  # must fail: saying Done does not fix the code
+python scripts/benchmark_port.py --mode live       # paid: uses the configured provider/model
+```
+
+Each invocation creates a fresh directory under `get_astraclaw_home()/benchmarks/port_validation/`
+with `manifest.json`, a workspace, isolated agent home/usage ledger, worker logs,
+and `result.json`. `--output <new-directory>` overrides the location; existing
+directories are rejected. Default limits: 90 seconds, six model requests, and
+2,048 output tokens per request. No fallback, memory, skills, titles, or compaction.
+The worker exposes only file tools restricted to `ports.py`; the independent
+checker is not available through those tools. It runs after the worker exits.
+
+Results separate execution status, grade status, verified success, and usage/cost
+coverage. Missing cost stays null; `recorded_cost_usd` is only the known subtotal.
+Mock usage is explicitly synthetic and is not a model-performance result.
+This pilot checks evaluation plumbing on one restricted task; it is not a coding
+quality benchmark or an OS sandbox for adversarial submissions.
 
 Run the full suite:
 

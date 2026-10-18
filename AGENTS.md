@@ -49,6 +49,8 @@ astra-claw/
 |   |-- constants.py          # get_astraclaw_home() + get_workspace_fence() - single source of truth
 |   |-- config.py             # DEFAULT_CONFIG + deep merge + load/save_user_config (atomic merge)
 |   |-- llm.py                # provider routing, client creation, transient fallback, resolve_api_key, validate_credentials
+|   |-- usage_ledger.py       # append-only request/run evidence + token normalization + context-local parent linkage
+|   |-- cost.py               # offline LiteLLM token-cost estimates + exact pricing snapshots
 |   |-- session.py            # JSONL session persistence + recent/search helpers
 |   |-- memory.py             # MemoryStore: frozen-snapshot persistent memory (MEMORY.md + USER.md)
 |   |-- soul.py               # SOUL.md loader + first-run seeding for global agent identity
@@ -97,7 +99,12 @@ astra-claw/
 |   |-- test_workspace.py    # --workspace flag + write_file fence tests
 |   |-- test_config.py       # load/save_user_config tests
 |   |-- test_llm.py          # resolve_api_key + validate_credentials tests
+|   |-- test_usage_ledger.py # usage-only chunks, failures/retries, parent/thread links, missing data
+|   |-- test_cost.py         # fixed token/cache arithmetic, unknown costs, offline import
+|   |-- test_benchmark_port.py # fixture/grader, isolated mock runs, limits, usage coverage
 |   `-- test_memory.py       # MemoryStore tests
+|-- benchmarks/port_validation/ # prompt.md + fixture/ports.py + independent check.py
+|-- scripts/benchmark_port.py # CLI-only one-task evaluation (mock, mock-noop, live)
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
 |   |-- progress.md          # implementation progress log
@@ -113,12 +120,14 @@ astra-claw/
 ```text
 constants.py       (no deps)
 config.py          (imports constants)
-llm.py             (imports OpenAI SDK only)
+llm.py             (imports OpenAI SDK + usage_ledger)
+usage_ledger.py    (imports constants + cost; stdlib contextvars/JSONL)
+cost.py            (lazy LiteLLM cost utilities + bundled catalog; no model calls)
 session.py         (imports constants)
 tools/registry.py  (no deps)
 tools/*.py         (import registry)
 agent/events.py    (no deps)
-agent/streaming.py (no agent-local deps)
+agent/streaming.py (imports usage_ledger; no agent-local deps)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_tool, tools.registry, agent.events)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/context_refs.py (imports constants, session, tools.path_safety)
@@ -134,6 +143,10 @@ __main__.py        (imports loop + cli + session)
 ## Rules
 
 - NEVER hardcode `~/.astraclaw` - use `get_astraclaw_home()` from `constants.py`.
+- Model usage evidence lives in `get_astraclaw_home()/usage/<run_id>.jsonl`. `usage_ledger.py` owns run/request start and finish events. Capture provider usage before skipping empty-choice stream chunks; preserve raw usage and nullable normalized counts. Never turn missing usage into zero or claim execution completion proves task success. Streaming calls request `include_usage`; model clients disable SDK retries so explicit fallback/compatibility attempts each have one request ID. Run context links delegates and compaction; title threads explicitly capture the completed parent. Do not log prompts, response text, credentials, or exception messages here. Ledger I/O errors propagate instead of silently losing evidence. Grading remains a future slice.
+- `cost.py` estimates model-token cost with pinned LiteLLM and its bundled price catalog (force local loading before import; no model calls or remote price refresh). Store the price entry, effective rates, library version, and catalog hash with each estimate. Match exact provider/model IDs; never substitute another provider's price. Missing usage/cache details/prices, interrupted requests, or unsupported billing rules yield null cost with a reason. These are token estimates, not provider-confirmed charges or total tool/cloud spend. Existing `/usage` remains a context estimate.
+- GPT-5.5 and its verified 2026-04-23 snapshot use long-context rates only when prompt_tokens > 272000, including cached input. Apply the selected rates to all input/cache/output tokens, not marginal excess tokens; output does not determine the threshold. Store context band and exact rate keys. Missing long-context service-tier/cache rates remain unknown; never substitute short or standard rates. Other context-pricing rules remain unsupported. Preserve historical ledgers; offline replay results must be separate artifacts.
+- `scripts/benchmark_port.py` is a one-task CLI pilot, not a general benchmark framework. Always create a fresh workspace/home. Worker file tools may touch only `ports.py`; grader runs separately after the worker. Mock records must stay labeled synthetic. Never infer success from the agent's text, silently exclude failed attempts, overwrite old results, or report known cost subtotals as complete totals. Live mode uses the configured route with no fallback; model calls require user authorization. `model.max_completion_tokens` optionally caps each streamed completion; absent means unchanged provider defaults.
 - All tool handlers MUST return a JSON string.
 - New tool = new file in `tools/` + `registry.register(name=..., toolset=..., ...)` at the bottom.
 - Use `patch` for targeted edits to existing files; use `write_file` for new files or deliberate full rewrites.

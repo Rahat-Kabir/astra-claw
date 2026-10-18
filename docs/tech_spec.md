@@ -22,6 +22,159 @@ Final Response
 
 ## Core Design Decisions
 
+### Request Measurement Contract (v0.4.0)
+
+`usage_ledger.py` writes local evidence to `get_astraclaw_home()/usage/<run_id>.jsonl`.
+Each conversation and manual compaction creates a run. Delegates create child runs;
+automatic compaction requests remain within their conversation. Background titles
+capture the completed conversation as their parent and retain its root ID. The
+non-streaming helper also creates a run so direct callers are measured.
+
+The ledger records model calls, not tool results or benchmark correctness:
+
+| Fields | Meaning |
+|---|---|
+| `schema_version`, `event`, `timestamp` | Version 1; `run_started`, `run_finished`, `request_started`, or `request_finished`; UTC time |
+| `run_id`, `root_run_id`, `parent_run_id`, `session_id` | Execution identity and parent linkage; session can be null for one-shot/direct calls |
+| `request_id` | Unique ID for one explicit SDK invocation; shared by its start/finish events |
+| `operation_id`, `attempt` | Group explicit route fallback or token-parameter compatibility attempts; attempt starts at 1 |
+| `provider`, `model`, `purpose` | Requested route and role: conversation, delegate, compaction, title, or direct completion |
+| `response_id`, `response_model`, `service_tier`, `finish_reason` | Provider response metadata when available; requested aliases remain separate |
+| `status`, `duration_seconds` | Request: completed/failed/interrupted; run additionally supports incomplete/max_turns. Duration uses a monotonic clock |
+| `raw_usage` | Provider usage object, retained independently of normalized counts |
+| `input_tokens`, `output_tokens`, `total_tokens` | Non-negative integer counts reported by the provider; missing/invalid values are null |
+| `cached_input_tokens`, `reasoning_tokens` | Optional provider details; subsets, not extra tokens to add to totals |
+| `usage_status` | reported: input and output counts present; partial: only some normalized counts present; missing: no usable counts |
+| `error_type`, `http_status` | Error class and HTTP status when available; no exception message |
+
+Streaming calls request `stream_options.include_usage`. Observe usage before
+skipping empty-choice chunks. Repeated snapshots replace prior snapshots; they
+are not summed. A clean stream end without a finish reason is recorded as
+interrupted and makes the run incomplete, while preserving existing return behavior.
+An interrupted stream can retain reported usage; execution and usage status are
+independent. Detail fields can remain null even when core usage is reported.
+
+Missing data never means zero. Request starts have no usage claim. A start with
+no matching finish means unknown outcome/usage after a crash, not success or free
+execution. Aggregate finished records once by request ID; include child requests
+once by root ID, and report unmatched starts and usage coverage separately. Do
+not infer a price or a correctness grade from these records. Total tokens are
+not reconstructed from partial counts, and provider totals are not billing receipts.
+
+OpenAI SDK retries are disabled for model clients (`max_retries=0`); Astra's
+single-step route fallback and non-streaming token-parameter retry remain and
+are recorded separately. Overflow recovery requests get their own operation IDs
+within the same run. Credential `/models` probes are outside the model ledger.
+Provider-internal retries and charges are not observable here.
+
+No prompts, generated text, tool arguments, credentials, or exception messages
+are stored. Ledger writes are serialized within a process; separate runs use
+separate files. I/O errors propagate; title generation retains its existing
+best-effort behavior. Abrupt termination can leave an unfinished record or line;
+no recovery or report reader is included yet. `/usage` remains a context estimate.
+Task checkers, benchmark comparison, and dashboards are deferred.
+
+### Offline Cost Estimates (v0.4.1)
+
+`cost.py::estimate_cost()` enriches each new `request_finished` record. It uses
+LiteLLM 1.106.0 only for cost arithmetic; model routing and requests still use
+the existing OpenAI SDK. LiteLLM loads lazily with remote price downloads
+disabled. Astra reads the package's bundled catalog directly and supplies the
+selected rates to `cost_per_token()`; no model or tokenizer call is needed.
+
+| Fields | Meaning |
+|---|---|
+| `estimated_cost_usd` | Estimated model-token charge, or null; never provider-confirmed billing |
+| `cost_status`, `cost_reason` | estimated, or unknown with a machine-readable reason |
+| `cost_currency`, `cost_scope` | USD and model_tokens; excludes tool services, cloud compute, taxes, and account discounts |
+| `pricing.source`, `pricing.library_version`, `pricing.catalog_sha256` | Bundled LiteLLM source and reproducible catalog identity |
+| `pricing.model`, `pricing.entry`, `pricing.effective_rates` | Exact provider-specific model entry and rates used |
+| `pricing.service_tier`, `pricing.service_tier_source` | Served tier when reported; otherwise explicitly assumed_default |
+
+Supported scope: completed OpenAI/OpenRouter requests with valid input/output
+counts, explicit cache-read counts (unless total input is zero), exact catalog
+matches, and flat per-token rates or the verified GPT-5.5 context tiers below.
+The served model takes precedence over a
+requested alias. There is no fuzzy model lookup or cross-provider price fallback.
+Default/standard, priority, and flex tiers require the corresponding rates.
+Cache-read tokens are a subset of input; reasoning tokens are a subset of output.
+Neither is added again. Missing total_tokens is allowed when input/output are
+reported; a conflicting reported total rejects the estimate.
+
+Missing usage, invalid counts, missing cache detail/prices, unknown models,
+unsupported providers/tiers, cache writes, reported media-specific token details,
+and unverified context-threshold pricing produce unknown cost, not zero. Failed/interrupted
+requests retain their token evidence but have unknown full cost. Nonzero price
+coverage must not be inferred from zero or null fields. Repeated snapshots are
+still priced once per request. No cost aggregates or historical backfill are
+included; old ledger rows have no cost fields. Request duration stops before cost
+calculation; run duration includes local bookkeeping.
+
+Catalog prices are community maintained and can be stale. Upgrading the pinned
+dependency deliberately changes pricing; existing records retain their snapshot.
+No live provider bill has been reconciled. New cost fields are additive under
+ledger schema version 1; consumers must treat absent fields as unknown.
+
+### GPT-5.5 Context Rates (v0.4.3)
+
+Verified against [OpenAI's GPT-5.5 pricing notes](https://developers.openai.com/api/docs/models/gpt-5.5)
+and [API pricing](https://developers.openai.com/api/docs/pricing) on 2026-10-19.
+The pinned LiteLLM catalog supplies the rates; these links establish their
+meaning, not a runtime dependency on web access.
+
+For `gpt-5.5`, `gpt-5.5-2026-04-23`, and the exact OpenRouter GPT-5.5 entry:
+
+- `prompt_tokens <= 272000` selects short-context rates; `> 272000` selects long-context rates.
+- Selection includes cached input and excludes output. The selected rates apply to the whole request, not only tokens above the threshold.
+- Standard rates per million tokens: short input/cache/output $5/$0.50/$30; long $10/$1/$45. Cost is `(input - cached) * input_rate + cached * cache_rate + output * output_rate`.
+- Service-tier suffixes are applied after the context suffix in the catalog key. Long-context priority prices are absent from the pinned catalog, so those estimates remain unknown. No fallback to short-context or standard prices.
+- `pricing.context_threshold_tokens`, `context_band`, `context_basis`, and `rate_keys` identify the selection. Unverified models, thresholds, and tiered schemas remain unknown.
+
+Tests cover below/exactly/above threshold, cache-heavy inputs, served snapshot
+IDs, flex/priority gaps, and replay of the prior live pilot's usage. That replay
+estimates $0.02141 for three requests. It makes no new model call and does not
+reconcile billing. The derivative `cost_replay_v0.4.3.json` retains source hashes;
+the historical result and ledger remain unchanged with their original unknown costs.
+
+### Port Validation Pilot (v0.4.2)
+
+`scripts/benchmark_port.py` runs exactly one versioned task from
+`benchmarks/port_validation/`: repair integer port validation. Each invocation
+creates a new workspace from the broken fixture and a fresh agent home with a
+fixed identity. Memory, skills, titles, compaction, delegation, shell, and fallback
+are disabled. Only read_file/write_file/patch on `ports.py` pass the worker's tool
+policy, including attempted calls to tools absent from the advertised schemas.
+The normal agent loop is reused; the policy wrapper exists only in that process.
+
+The controller enforces a 90-second worker timeout. With no shell or delegated
+workers, killing this worker stops its local task execution. A request already
+received by the provider can still incur charges. Default agent limit is six
+requests, each with `max_completion_tokens=2048`. This optional model config field
+is passed to streaming calls; normal callers that omit it are unchanged.
+
+After the worker exits, a separate `python -I` process runs `check.py` outside the
+agent tool workspace with model credentials removed from its environment. It
+checks all integers 1..65535, representative out-of-range integers, and invalid
+types including booleans. Candidate load/runtime exceptions fail the task;
+checker failure, invalid output, or a five-second checker timeout gives an
+unknown grade. This is process separation, not an OS sandbox for malicious Python.
+
+`manifest.json` freezes task/version, prompt/fixture/checker/runner/harness hashes,
+public config, tool names, Python version, and budgets. No key is saved. Outputs
+include execution.json, worker logs, the candidate source, home/usage ledgers, and
+result.json. Existing result directories are never reused. Modes mock/mock-noop
+exercise the real loop with synthetic model events; live uses the configured
+provider/model and requires authorization for paid calls.
+
+`result.json` separates execution status, grade status, and verified_success.
+Only a completed execution plus a graded pass is verified success. A timeout
+can still have an independently graded output, but is not a verified success.
+Usage aggregation deduplicates request identities, exposes unmatched starts and
+corrupt/duplicate records, and keeps known token/cost subtotals separate from
+complete totals. Missing coverage yields null full totals. Synthetic usage is
+labeled and must not be pooled with live measurements. A single live pass is
+only a smoke result for this restricted profile, not a general quality claim.
+
 ### Session Persistence (JSONL)
 
 - Each session is one `.jsonl` file in `~/.astraclaw/sessions/`
@@ -327,7 +480,9 @@ Final Response
 ```text
 constants.py       (no deps)
 config.py          (imports constants, soul)
-llm.py             (imports OpenAI SDK only)
+llm.py             (imports OpenAI SDK + usage_ledger)
+usage_ledger.py    (imports constants + cost)
+cost.py            (lazy LiteLLM cost utilities + bundled catalog)
 session.py         (imports constants)
 memory.py          (imports constants)
 soul.py            (imports constants)

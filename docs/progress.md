@@ -555,13 +555,67 @@ Why: queued follow-ups could line up future work, but a user could not redirect 
 - [x] Verified focused command/UI/steering suite: `.\venv\Scripts\python.exe -m pytest tests\cli\test_commands.py tests\cli\test_ui_heartbeat.py tests\cli\test_followup.py tests\cli\test_repl.py tests\agent\test_loop.py -q` -> 80 passed
 - [x] Verified full suite: `.\venv\Scripts\python.exe -m pytest -q` -> 517 passed
 
+## v0.4.0 - Request Usage Evidence (2026-10-19)
+
+Why: benchmark and cost claims need provider usage, traceable attempts, and explicit missing-data states before any score or dashboard.
+
+### Completed
+
+- [x] `usage_ledger.py` - append-only per-run JSONL with run/request start and finish events, root/parent linkage, monotonic durations, requested/resolved model IDs, raw usage, nullable token counts, and explicit usage/outcome statuses
+- [x] Streaming captures usage-only chunks before the empty-choice guard; duplicate usage snapshots are not summed; incomplete streams and exceptions retain evidence and close streams
+- [x] Conversation, delegate, compaction, background-title, route fallback, and non-streaming compatibility attempts are attributed; model SDK retries disabled to avoid hidden HTTP attempts
+- [x] No prompt/response text, tool arguments, keys, or exception messages in the ledger; test homes isolated; ledger I/O failures remain visible
+- [x] Measurement contract and release chapter documented; focused mocked verification covers usage/missing values, failures, interrupts, linkage, concurrent runs, and write errors
+- [x] Verified CLI: `python -m pytest tests -q` -> 538 passed (21 new ledger cases); `git diff --check` passed. No live model calls.
+- [x] Costs, task grading, live provider verification, and dashboards intentionally deferred
+
+## v0.4.1 - Offline LiteLLM Cost Estimates (2026-10-19)
+
+Why: convert provider usage into reproducible token-cost estimates without treating missing data as free usage or changing model routing.
+
+### Completed
+
+- [x] `cost.py` - pinned LiteLLM cost arithmetic with bundled prices, exact provider/model matching, cache-read discounts, and tested service-tier rates
+- [x] New finished-request records include estimated USD token cost, estimated/unknown status and reason, full price entry, effective rates, catalog hash, and library version
+- [x] Missing/invalid usage, missing cache data/prices, unknown models, incomplete requests, and unsupported billing rules remain unknown; raw provider evidence is retained
+- [x] Local-only price loading; tests block network access and use fixed arithmetic, including a fresh interpreter import; no paid requests
+- [x] Verified CLI: `python -m pytest tests -q` -> 564 passed (26 new cost cases); `python -m pip check` and `git diff --check` passed
+- [x] Task grading, cost aggregation/dashboard, and live billing reconciliation remain deferred
+
+## v0.4.2 - Port Validation Benchmark Pilot (2026-10-19)
+
+Why: prove that fresh fixtures, independent grading, request evidence, and cost coverage work together before comparing agent variants.
+
+### Completed
+
+- [x] One fixed task: broken `validate_port`, explicit prompt contract, and independent checker for the full valid range plus invalid types and boundaries
+- [x] `scripts/benchmark_port.py` - separate worker/grader processes, fresh workspace/home, restricted file tools, time/request/output limits, and mock/mock-noop/live modes
+- [x] Manifest hashes identify task inputs, checker, runner, harness code, config, and budgets; result separates execution, grading, verified success, and usage/cost coverage
+- [x] No-op completion fails grading; checker errors remain unknown; missing/partial accounting never becomes a complete zero-cost claim
+- [x] `model.max_completion_tokens` is optional for streamed calls; normal callers remain unchanged when absent
+- [x] Verified CLI: `python -m pytest tests -q` -> 574 passed; `git diff --check` passed. Mock fix passes; mock-noop fails; timeout and checker-error paths remain distinct.
+- [x] Authorized live smoke on configured `openai:gpt-5.5`: all four checker conditions passed; 15.25s, 3 requests, 2 tool calls, 2,950 input / 222 output tokens. Run artifact: `benchmarks/port_validation/3a30054e22114cc199b03217dcc8367b/result.json` under the configured Astra home. All three costs remain unknown (`unsupported_context_pricing`); no zero-cost or general-quality claim.
+
+## v0.4.3 - GPT-5.5 Context Pricing (2026-10-19)
+
+Why: the configured model's requests had complete token evidence but unknown cost because its context-tier rules had not been verified.
+
+### Completed
+
+- [x] Verified the strict >272000 input-token threshold and whole-request input/cache/output pricing against official OpenAI docs and pinned LiteLLM data
+- [x] Exact GPT-5.5/snapshot/OpenRouter entries select tested context/service-tier keys; missing rates and unverified rules remain unknown
+- [x] Price evidence includes context band, threshold basis, and actual catalog keys; cache and reasoning subsets are not double-counted
+- [x] Offline replay of the three saved live requests prices all three at $0.02141 total estimated token cost; separate `cost_replay_v0.4.3.json` preserves source hashes and leaves historical ledgers/results unchanged
+- [x] No new paid requests or billing reconciliation
+- [x] Verified CLI: `python -m pytest tests -q` -> 593 passed (19 new pricing cases); `git diff --check` passed
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.
 
 ## Planned
 
-(Delegation chapter opened at v0.3.0; see `docs/RELEASE_v0.3.md`.)
+(Measurement chapter opened at v0.4.0; see `docs/RELEASE_v0.4.md`.)
 
 ## Deferred (not scheduled)
 

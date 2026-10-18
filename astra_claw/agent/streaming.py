@@ -10,6 +10,8 @@ from __future__ import annotations
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ..usage_ledger import mark_run_status, request_scope
+
 
 def collect_stream_response(
     client: Any,
@@ -19,19 +21,34 @@ def collect_stream_response(
     tools: Optional[List[Dict[str, Any]]] = None,
     stream_writer: Optional[Callable[[str], None]] = None,
     on_thinking: Optional[Callable[[bool], None]] = None,
+    purpose: str = "conversation",
+    attempt: int = 1,
+    operation_id: Optional[str] = None,
+    max_completion_tokens: Optional[int] = None,
 ) -> Tuple[str, Optional[List[Dict[str, Any]]], bool]:
     """Iterate a single streamed completion and return its shape.
 
     Returns (full_content, tool_calls_list_or_None, has_meaningful_output).
     Raises the SDK's error on failure; the caller handles fallback.
     """
+    with request_scope(route["provider"], route["model"], purpose=purpose,
+                       attempt=attempt, operation_id=operation_id) as evidence:
+        return _collect_stream_response(client, route, tools, stream_writer, on_thinking,
+                                        messages, evidence, max_completion_tokens)
+
+
+def _collect_stream_response(client, route, tools, stream_writer, on_thinking, messages, evidence,
+                             max_completion_tokens):
     kwargs: Dict[str, Any] = {
         "model": route["model"],
         "messages": messages,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
     if tools:
         kwargs["tools"] = tools
+    if max_completion_tokens is not None:
+        kwargs["max_completion_tokens"] = max_completion_tokens
 
     if on_thinking is not None:
         on_thinking(True)
@@ -40,13 +57,18 @@ def collect_stream_response(
     content_parts: List[str] = []
     tool_calls_acc: Dict[int, Dict[str, Any]] = {}
     has_meaningful_output = False
+    saw_finish = False
+    stream = None
 
     try:
         stream = client.chat.completions.create(**kwargs)
         for chunk in stream:
+            evidence.observe(chunk)
             if not chunk.choices:
                 continue
 
+            if getattr(chunk.choices[0], "finish_reason", None) is not None:
+                saw_finish = True
             delta = chunk.choices[0].delta
 
             if delta.content:
@@ -83,7 +105,12 @@ def collect_stream_response(
                             entry["function"]["name"] += tc_delta.function.name
                         if tc_delta.function.arguments:
                             entry["function"]["arguments"] += tc_delta.function.arguments
+        if not saw_finish:
+            evidence.status = "interrupted"
+            mark_run_status("incomplete")
     finally:
+        if stream is not None and callable(getattr(stream, "close", None)):
+            stream.close()
         if not thinking_stopped and on_thinking is not None:
             on_thinking(False)
 

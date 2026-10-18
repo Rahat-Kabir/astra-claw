@@ -10,9 +10,11 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from contextvars import copy_context
 from typing import Optional
 
 from ..llm import complete_once
+from ..usage_ledger import context_with_run
 from ..session import get_session_title, set_session_title
 
 logger = logging.getLogger(__name__)
@@ -92,6 +94,7 @@ def generate_title(
     model: str,
     timeout: float = 30.0,
     api_key: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Optional[str]:
     """Generate a title from the first exchange. Returns None on failure."""
     user_snippet = (user_message or "")[:500]
@@ -114,6 +117,8 @@ def generate_title(
             temperature=0.3,
             timeout=timeout,
             api_key=api_key,
+            purpose="title",
+            session_id=session_id,
         )
     except Exception as e:
         logger.debug("title generation failed: %s", e)
@@ -153,6 +158,7 @@ def auto_title_session(
         provider=provider,
         model=model,
         api_key=api_key,
+        session_id=session_id,
     )
     if not title:
         return
@@ -174,6 +180,7 @@ def maybe_auto_title(
     model: str,
     enabled: bool = True,
     api_key: Optional[str] = None,
+    usage_run=None,
 ) -> Optional[threading.Thread]:
     """Fire-and-forget title generation after the first substantive exchange.
 
@@ -195,8 +202,8 @@ def maybe_auto_title(
         return None
 
     thread = threading.Thread(
-        target=auto_title_session,
-        args=(session_id, user_message, assistant_response),
+        target=context_with_run(copy_context(), usage_run).run,
+        args=(auto_title_session, session_id, user_message, assistant_response),
         kwargs={"provider": provider, "model": model, "api_key": api_key},
         daemon=True,
         name="auto-title",

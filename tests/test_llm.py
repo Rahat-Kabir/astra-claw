@@ -30,14 +30,16 @@ def test_create_client_uses_explicit_api_key(monkeypatch):
     captured = {}
 
     class FakeOpenAI:
-        def __init__(self, base_url, api_key):
+        def __init__(self, base_url, api_key, max_retries):
             captured["base_url"] = base_url
             captured["api_key"] = api_key
+            captured["max_retries"] = max_retries
 
     with patch.object(llm, "OpenAI", FakeOpenAI):
         llm.create_client("openai", api_key="explicit")
 
     assert captured["api_key"] == "explicit"
+    assert captured["max_retries"] == 0
     assert captured["base_url"] == llm.PROVIDER_BASE_URLS["openai"]
 
 
