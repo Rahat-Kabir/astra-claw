@@ -37,9 +37,10 @@ It is not designed as:
 - Conversational AI agent with a tool-calling loop
 - Local request-usage ledger: append-only JSONL evidence with run/parent IDs, provider token usage, missing-data states, request failures, and offline LiteLLM token-cost estimates with pricing snapshots
 - GPT-5.5 token estimates select short/long context rates at the verified 272,000-input-token threshold, including cache discounts and supported service-tier rates; missing rates remain unknown
-- One-task benchmark pilot: fresh port-validation fixture, independent checker, run limits, and linked usage/cost evidence; mock and live modes
+- Three-task benchmark pilot: fresh repair fixtures, independent checkers, run limits, and linked usage/cost evidence; mock and live modes
 - Light Rich/prompt_toolkit CLI with history, slash commands, and autocomplete; startup banner shows the active `provider:model` route
 - Reads, writes, and surgically edits files via `read_file`, `write_file`, and `patch`
+- Tool output previews are capped at 2,000 lines / 50 KiB. Oversized output is saved under the Astra home in `tool-output/`; the agent receives its path. `read_file` supports 1-based `offset` and `limit` (default/cap 2,000 lines), with `next_offset` for more. Saved output expires after seven days, cleaned when another oversized result is saved.
 - Runs shell commands via `shell` with approval for destructive commands and package/environment mutations such as `pip install`, `uv run --with`, and `npm install`
 - Searches files via `search_files` for content or filenames
 - Expands inline context references (`@file:`, `@folder:`, `@diff`, `@session:`) before agent turns, with fuzzy tab completion for file/folder/session picks in the REPL
@@ -260,6 +261,7 @@ astra-claw/
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
 |   |   |-- streaming.py      # stream iteration + on_thinking + context-overflow detection
 |   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
+|   |   |-- tool_output.py    # bounded previews + saved full output + seven-day expiry
 |   |   |-- title_generator.py # auto-generates session titles after first substantive turn
 |   |   |-- loop.py           # AstraAgent - core conversation loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
@@ -287,7 +289,9 @@ astra-claw/
 |   |-- test_usage_ledger.py # mocked request accounting and missing-data checks
 |   `-- test_cost.py         # real LiteLLM calculations with fixed usage; network blocked
 |-- benchmarks/port_validation/ # prompt.md, broken fixture/ports.py, independent check.py
-|-- scripts/benchmark_port.py   # one-task runner (mock, mock-noop, live)
+|-- benchmarks/slug_normalization/ # text-normalization repair + independent checker
+|-- benchmarks/retry_delay/     # capped retry schedule repair + independent checker
+|-- scripts/benchmark_port.py   # three-task runner (mock, mock-noop, live)
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
 |   |-- progress.md          # implementation progress log
@@ -368,26 +372,31 @@ Context compaction rewrites long interactive session transcripts after archiving
 
 ## Testing
 
-### One-task benchmark pilot
+### Three-task benchmark pilot
 
 ```powershell
 python scripts/benchmark_port.py --mode mock       # synthetic tool-loop smoke; no model calls
 python scripts/benchmark_port.py --mode mock-noop  # must fail: saying Done does not fix the code
+python scripts/benchmark_port.py --task slug_normalization --mode mock
+python scripts/benchmark_port.py --task retry_delay --mode mock
 python scripts/benchmark_port.py --mode live       # paid: uses the configured provider/model
 ```
 
-Each invocation creates a fresh directory under `get_astraclaw_home()/benchmarks/port_validation/`
+`--task` selects `port_validation` (default), `slug_normalization`, or `retry_delay`.
+The tasks check integer validation, ASCII slug normalization, and a capped
+exponential retry schedule. Each has its own prompt, broken file, and checker.
+Each invocation creates a fresh directory under `get_astraclaw_home()/benchmarks/<task>/`
 with `manifest.json`, a workspace, isolated agent home/usage ledger, worker logs,
 and `result.json`. `--output <new-directory>` overrides the location; existing
 directories are rejected. Default limits: 90 seconds, six model requests, and
 2,048 output tokens per request. No fallback, memory, skills, titles, or compaction.
-The worker exposes only file tools restricted to `ports.py`; the independent
+The worker exposes only file tools restricted to the selected task file; the independent
 checker is not available through those tools. It runs after the worker exits.
 
 Results separate execution status, grade status, verified success, and usage/cost
 coverage. Missing cost stays null; `recorded_cost_usd` is only the known subtotal.
 Mock usage is explicitly synthetic and is not a model-performance result.
-This pilot checks evaluation plumbing on one restricted task; it is not a coding
+These three small tasks check evaluation plumbing; this is not a general coding
 quality benchmark or an OS sandbox for adversarial submissions.
 
 Run the full suite:

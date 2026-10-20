@@ -1,10 +1,59 @@
-"""One-task pilot: independent grading and mock process runs, never paid calls."""
+"""Fixed repair tasks: independent grading and mock runs, never paid calls."""
 
 import json
 
 import pytest
 
-from scripts.benchmark_port import TASK, permitted_call, run_benchmark, run_checker, usage_summary
+from scripts.benchmark_port import (ROOT, TASK, TASK_FILES, permitted_call, run_benchmark,
+                                    run_checker, usage_summary)
+
+
+@pytest.mark.parametrize("task_id", ["slug_normalization", "retry_delay"])
+def test_additional_tasks_have_independent_grades_and_fresh_workspaces(tmp_path, task_id):
+    fixed = tmp_path / "fixed"
+    report = run_benchmark(fixed, task_id=task_id)
+    assert report["task_id"] == task_id
+    assert report["verified_success"] is True
+    assert all(report["grade"]["checks"].values())
+    assert report["usage_origin"] == "synthetic"
+    assert report["usage"]["requests_finished"] == 3
+    assert report["usage"]["estimated_cost_usd"] is None
+    manifest = json.loads((fixed / "manifest.json").read_text())
+    assert manifest["task_id"] == task_id and manifest["task_version"] == 1
+    assert len(manifest["checker_sha256"]) == 64
+    unchanged = run_benchmark(tmp_path / "unchanged", mode="mock-noop", task_id=task_id)
+    assert unchanged["execution_status"] == "completed"
+    assert unchanged["grade"]["grade_status"] == "graded"
+    assert unchanged["grade"]["passed"] is False
+    assert unchanged["verified_success"] is False
+    filename = TASK_FILES[task_id]
+    assert (tmp_path / "unchanged" / "workspace" / filename).read_bytes() == (
+        ROOT / "benchmarks" / task_id / "fixture" / filename).read_bytes()
+    call = lambda path: {"function": {"name": "read_file", "arguments": json.dumps({"path": path})}}
+    assert permitted_call(call(str(fixed / "workspace" / filename)), fixed / "workspace", filename)
+    assert not permitted_call(call(str(ROOT / "benchmarks" / task_id / "check.py")),
+                              fixed / "workspace", filename)
+
+
+@pytest.mark.parametrize("task_id,source", [
+    ("slug_normalization", 'def slugify(text):\n    return "hello-world"\n'),
+    ("slug_normalization", 'import re\ndef slugify(text):\n    return re.sub(r"[^a-z0-9]+", "-", text.lower())\n'),
+    ("retry_delay", 'def retry_delay(attempt):\n    return min(2 ** min(attempt, 5), 30)\n'),
+    ("retry_delay", 'def retry_delay(attempt):\n    return 30\n'),
+])
+def test_independent_checks_reject_incomplete_repairs(tmp_path, task_id, source):
+    filename = TASK_FILES[task_id]
+    (tmp_path / filename).write_text(source, encoding="utf-8")
+    result = run_checker(tmp_path, checker=ROOT / "benchmarks" / task_id / "check.py",
+                         filename=filename)
+    assert result["grade_status"] == "graded" and result["passed"] is False
+
+
+def test_unknown_task_is_rejected_before_creating_run(tmp_path):
+    directory = tmp_path / "run"
+    with pytest.raises(ValueError, match="Unknown task"):
+        run_benchmark(directory, task_id="../other")
+    assert not directory.exists()
 
 
 def test_broken_fixture_fails_independent_checker(tmp_path):

@@ -93,6 +93,10 @@ def summarize_tool_result(name: str, result: str) -> Optional[str]:
     if err:
         return f"error: {_oneline(err, _SUMMARY_MAX)}"
 
+    if data.get("truncated") and data.get("output_path"):
+        prefix = f"exit {data['exit_code']}; " if "exit_code" in data else ""
+        return f"{prefix}output truncated; full output: {data['output_path']}"
+
     if name == "read_file":
         content = data.get("content")
         if isinstance(content, str):

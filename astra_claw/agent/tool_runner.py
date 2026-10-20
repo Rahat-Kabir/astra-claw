@@ -16,6 +16,7 @@ from ..tools.registry import registry
 from ..tools.session_search_tool import session_search_tool
 from ..tools.todo_tool import TodoStore, todo_tool
 from .events import AgentEvents
+from .tool_output import bound_tool_result
 
 
 def execute_tool_calls(
@@ -81,6 +82,8 @@ def execute_tool_calls(
             )
         else:
             result = registry.dispatch(fn_name, fn_args)
+
+        result = bound_tool_result(result)
 
         if events is not None and events.on_tool_complete is not None:
             events.on_tool_complete(call_id, fn_name, fn_args, result)

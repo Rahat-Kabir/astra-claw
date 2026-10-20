@@ -1,6 +1,7 @@
 """File tools — read_file, write_file."""
 
 import json
+from itertools import islice
 from pathlib import Path
 
 from .path_safety import (
@@ -19,18 +20,33 @@ from .registry import registry
 # ---------------------------------------------------------------------------
 
 def read_file(args: dict) -> str:
-    """Read a text file and return its content."""
+    """Read a bounded page of lines, keeping text unchanged for patching."""
     path = args.get("path", "")
     if not path:
         return json.dumps({"error": "No path provided"})
+
+    offset = args.get("offset", 1)
+    limit = args.get("limit", 2000)
+    if type(offset) is not int or offset < 1:
+        return json.dumps({"error": "offset must be a positive integer (1-based)"})
+    if type(limit) is not int or limit < 1:
+        return json.dumps({"error": "limit must be a positive integer"})
+    limit = min(limit, 2000)
 
     filepath = Path(path).expanduser()
     if not filepath.exists():
         return json.dumps({"error": f"File not found: {path}"})
 
     try:
-        content = filepath.read_text(encoding="utf-8")
-        return json.dumps({"path": str(filepath), "content": content})
+        with filepath.open(encoding="utf-8") as stream:
+            lines = list(islice(stream, offset - 1, offset - 1 + limit + 1))
+        has_more = len(lines) > limit
+        page = lines[:limit]
+        return json.dumps({
+            "path": str(filepath), "content": "".join(page),
+            "offset": offset, "lines_read": len(page),
+            "next_offset": offset + len(page) if has_more else None,
+        })
     except Exception as e:
         return json.dumps({"error": f"Failed to read file: {e}"})
 
@@ -90,13 +106,21 @@ def write_file(args: dict) -> str:
 
 READ_FILE_SCHEMA = {
     "name": "read_file",
-    "description": "Read a text file and return its content. Use this to read any file on disk.",
+    "description": "Read a text file in pages. offset is a 1-based line number; limit defaults to and is capped at 2000 lines. Follow next_offset to read more. Text has no added line-number prefixes, so it can be used directly with patch.",
     "parameters": {
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
                 "description": "Path to the file to read (absolute, relative, or ~/path)",
+            },
+            "offset": {
+                "type": "integer", "minimum": 1,
+                "description": "First line to read (1-based, default 1)",
+            },
+            "limit": {
+                "type": "integer", "minimum": 1,
+                "description": "Maximum lines to read (default and cap 2000)",
             },
         },
         "required": ["path"],

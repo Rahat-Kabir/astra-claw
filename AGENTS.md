@@ -72,6 +72,7 @@ astra-claw/
 |   |   |-- events.py         # AgentEvents dataclass (on_thinking/tool_start/tool_complete)
 |   |   |-- streaming.py      # one-stream iteration + on_thinking + context-overflow detection
 |   |   |-- tool_runner.py    # one-batch tool dispatch with event hooks
+|   |   |-- tool_output.py    # shared 2,000-line/50-KiB previews + full-output artifacts
 |   |   |-- title_generator.py # daemon-thread auto-title after first substantive exchange
 |   |   |-- loop.py           # AstraAgent class + run_conversation() -> streaming + tool loop + preflight compaction
 |   |   `-- prompt_builder.py # system prompt assembly (SOUL.md + memory snapshot)
@@ -104,7 +105,9 @@ astra-claw/
 |   |-- test_benchmark_port.py # fixture/grader, isolated mock runs, limits, usage coverage
 |   `-- test_memory.py       # MemoryStore tests
 |-- benchmarks/port_validation/ # prompt.md + fixture/ports.py + independent check.py
-|-- scripts/benchmark_port.py # CLI-only one-task evaluation (mock, mock-noop, live)
+|-- benchmarks/slug_normalization/ # prompt + fixture/slug.py + independent check.py
+|-- benchmarks/retry_delay/ # prompt + fixture/retry.py + independent check.py
+|-- scripts/benchmark_port.py # CLI-only three-task evaluation (mock, mock-noop, live)
 |-- docs/
 |   |-- tech_spec.md         # technical design notes
 |   |-- progress.md          # implementation progress log
@@ -129,6 +132,7 @@ tools/*.py         (import registry)
 agent/events.py    (no deps)
 agent/streaming.py (imports usage_ledger; no agent-local deps)
 agent/tool_runner.py (imports memory, tools.memory_tool, tools.session_search_tool, tools.registry, agent.events)
+agent/tool_output.py (imports constants + tools.path_safety; used by tool_runner)
 agent/loop.py      (imports config, llm, memory, prompt_builder, registry, events, streaming, tool_runner)
 cli/context_refs.py (imports constants, session, tools.path_safety)
 cli/image_attachments.py (imports tools.path_safety)
@@ -146,8 +150,9 @@ __main__.py        (imports loop + cli + session)
 - Model usage evidence lives in `get_astraclaw_home()/usage/<run_id>.jsonl`. `usage_ledger.py` owns run/request start and finish events. Capture provider usage before skipping empty-choice stream chunks; preserve raw usage and nullable normalized counts. Never turn missing usage into zero or claim execution completion proves task success. Streaming calls request `include_usage`; model clients disable SDK retries so explicit fallback/compatibility attempts each have one request ID. Run context links delegates and compaction; title threads explicitly capture the completed parent. Do not log prompts, response text, credentials, or exception messages here. Ledger I/O errors propagate instead of silently losing evidence. Grading remains a future slice.
 - `cost.py` estimates model-token cost with pinned LiteLLM and its bundled price catalog (force local loading before import; no model calls or remote price refresh). Store the price entry, effective rates, library version, and catalog hash with each estimate. Match exact provider/model IDs; never substitute another provider's price. Missing usage/cache details/prices, interrupted requests, or unsupported billing rules yield null cost with a reason. These are token estimates, not provider-confirmed charges or total tool/cloud spend. Existing `/usage` remains a context estimate.
 - GPT-5.5 and its verified 2026-04-23 snapshot use long-context rates only when prompt_tokens > 272000, including cached input. Apply the selected rates to all input/cache/output tokens, not marginal excess tokens; output does not determine the threshold. Store context band and exact rate keys. Missing long-context service-tier/cache rates remain unknown; never substitute short or standard rates. Other context-pricing rules remain unsupported. Preserve historical ledgers; offline replay results must be separate artifacts.
-- `scripts/benchmark_port.py` is a one-task CLI pilot, not a general benchmark framework. Always create a fresh workspace/home. Worker file tools may touch only `ports.py`; grader runs separately after the worker. Mock records must stay labeled synthetic. Never infer success from the agent's text, silently exclude failed attempts, overwrite old results, or report known cost subtotals as complete totals. Live mode uses the configured route with no fallback; model calls require user authorization. `model.max_completion_tokens` optionally caps each streamed completion; absent means unchanged provider defaults.
+- `scripts/benchmark_port.py` is a three-task CLI pilot, not a general benchmark framework. `--task` selects port_validation (default), slug_normalization, or retry_delay. Always create a fresh workspace/home. Worker file tools may touch only the selected fixture file; grader runs separately after the worker. Mock records must stay labeled synthetic. Never infer success from the agent's text, silently exclude failed attempts, overwrite old results, or report known cost subtotals as complete totals. Live mode uses the configured route with no fallback; model calls require user authorization. `model.max_completion_tokens` optionally caps each streamed completion; absent means unchanged provider defaults.
 - All tool handlers MUST return a JSON string.
+- `agent/tool_output.py` bounds tool results in `tool_runner.py` before completion events/history. Keep small results unchanged and oversized results valid JSON; preserve small shell/file metadata. Full text is saved under `get_astraclaw_home()/tool-output/`; only owned expired artifacts are cleaned (seven days, on spill). `read_file` supports 1-based `offset`, capped `limit` (2,000), and `next_offset`. These are model-context limits, not subprocess-memory limits.
 - New tool = new file in `tools/` + `registry.register(name=..., toolset=..., ...)` at the bottom.
 - Use `patch` for targeted edits to existing files; use `write_file` for new files or deliberate full rewrites.
 - Tools may optionally provide a `check_fn` so unavailable tools are hidden from model schemas.

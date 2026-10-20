@@ -8,6 +8,14 @@ from astra_claw.cli.tool_display import (
 )
 
 
+def test_truncated_output_summary_shows_saved_path_and_real_exit_code():
+    result = json.dumps({"output": "preview", "exit_code": 7,
+                         "truncated": True, "output_path": "saved/tool.txt"})
+    assert summarize_tool_result("shell", result) == (
+        "exit 7; output truncated; full output: saved/tool.txt"
+    )
+
+
 class TestBuildToolPreview:
     def test_path_based_tools_use_path(self):
         for name in ("read_file", "write_file", "patch"):

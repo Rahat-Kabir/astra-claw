@@ -609,6 +609,34 @@ Why: the configured model's requests had complete token evidence but unknown cos
 - [x] No new paid requests or billing reconciliation
 - [x] Verified CLI: `python -m pytest tests -q` -> 593 passed (19 new pricing cases); `git diff --check` passed
 
+## v0.4.4 - Two More Fixed Benchmark Tasks (2026-10-19)
+
+Why: test the same measurement pipeline on text and numeric repairs before drawing conclusions from one port-validation task.
+
+### Completed
+
+- [x] `slug_normalization` - explicit ASCII/Unicode and separator contract, broken fixture, and independent character-based oracle with generated cases
+- [x] `retry_delay` - explicit exponential schedule/cap and type contract, broken fixture, and independent schedule/boundary/large-integer checks
+- [x] Existing CLI accepts `--task`; default port task and measurement rules stay compatible. Each worker can access only its selected fixture file.
+- [x] Mock repair and fresh no-op runs cover each new task; incomplete repairs fail grading. Mock results remain synthetic, with no paid model calls.
+- [x] Both new tasks passed direct CLI mock runs; focused benchmark suite: 16 passed.
+- [x] Full suite: 600 passed; `git diff --check` passed.
+- [x] Version bumped to 0.4.4; task prompts/checkers and commands documented. Variant comparison and dashboards remain unbuilt.
+
+## v0.4.5 - Bounded Tool Output (2026-10-20)
+
+Why: one large file or command result could consume the model context before compaction could help.
+
+### Completed
+
+- [x] Shared post-dispatch 2,000-line / 50-KiB text previews, valid JSON metadata, full-output artifacts, and visible retrieval instructions; small results stay unchanged
+- [x] Seven-day artifact expiry on spill; write failures propagate and cleanup touches only owned regular files
+- [x] `read_file` supports 1-based `offset`, capped `limit`, and `next_offset`, preserving original page text for patching
+- [x] CLI reports truncation, artifact path, and actual shell exit code
+- [x] Offline tests cover output limits/recovery, Unicode, paging, failures, expiry, real shell execution, special tools, and event/history ordering
+- [x] Verified CLI: `python -m pytest tests -q` -> 627 passed; `git diff --check` passed
+- [x] README, architecture, project structure, testing notes, and version updated; no paid requests or new dependencies
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.

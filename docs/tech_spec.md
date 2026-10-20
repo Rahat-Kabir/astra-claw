@@ -2,6 +2,39 @@
 
 ## Architecture
 
+### Bounded tool output (v0.4.5)
+
+`agent/tool_runner.py` calls `agent/tool_output.py::bound_tool_result()` after
+every dispatch (including special-case tools), before completion events and
+conversation history. Following OpenCode's preview/artifact approach, text is
+limited to 2,000 lines or 50 KiB of UTF-8, whichever comes first. Limits apply
+to preview text, excluding the JSON envelope and small metadata. Even a single
+long line is byte-bounded without splitting a UTF-8 character.
+
+Small JSON results remain unchanged. For `output`, `content`, or `summary`
+strings with at most 4 KiB of other metadata, preserve the other fields and save
+the complete string as a UTF-8 text artifact. For other shapes, save the entire
+pretty-printed JSON document and return its preview, preserving small scalar
+exit/status/error fields. Oversized responses include `truncated`, `output_path`,
+and `truncation_message`; a tool's own truncation flag never bypasses this cap.
+The CLI shows the saved path and shell exit code.
+
+Artifacts live in `get_astraclaw_home()/tool-output/tool_<uuid>.txt`, separate
+from workspace edits and the usage ledger. Save errors propagate. On each spill,
+remove only matching regular files older than seven days; leave symlinks and
+unrelated files alone. No cleanup daemon or new dependency is required. Artifacts
+contain full tool text and therefore have the same privacy sensitivity as tool
+results; old transcript paths can expire.
+
+`read_file` accepts positive integer `offset` (1-based, default 1) and `limit`
+(default/cap 2,000). It streams past preceding lines, reads a page plus one
+lookahead line, and returns unchanged page text, `offset`, `lines_read`, and
+`next_offset` (null at EOF). Do not prepend line numbers: patch needs original
+text. A byte-truncated page can be recovered from its saved artifact; `next_offset`
+refers to the original requested page, not just the preview. Very long individual
+lines require a shell character slice. Shell output is still captured in memory;
+this slice bounds model context, not process memory or disk use.
+
 ```text
 User Input
     |
@@ -72,7 +105,7 @@ are stored. Ledger writes are serialized within a process; separate runs use
 separate files. I/O errors propagate; title generation retains its existing
 best-effort behavior. Abrupt termination can leave an unfinished record or line;
 no recovery or report reader is included yet. `/usage` remains a context estimate.
-Task checkers, benchmark comparison, and dashboards are deferred.
+Task checkers are described below. Variant comparison and dashboards are deferred.
 
 ### Offline Cost Estimates (v0.4.1)
 
@@ -136,13 +169,20 @@ estimates $0.02141 for three requests. It makes no new model call and does not
 reconcile billing. The derivative `cost_replay_v0.4.3.json` retains source hashes;
 the historical result and ledger remain unchanged with their original unknown costs.
 
-### Port Validation Pilot (v0.4.2)
+### Fixed Repair Tasks (v0.4.2, extended v0.4.4)
 
-`scripts/benchmark_port.py` runs exactly one versioned task from
-`benchmarks/port_validation/`: repair integer port validation. Each invocation
+`scripts/benchmark_port.py` selects one versioned task with `--task`:
+`port_validation` (default, ports.py), `slug_normalization` (slug.py), or
+`retry_delay` (retry.py). Each task has a prompt, fixture, and independent checker
+under `benchmarks/<task>/`. Slug checks cover lowercase ASCII filtering,
+separator collapse/trim, Unicode, empty input, generated combinations, and long
+text. Retry checks cover the exact schedule, cap, huge attempts, and invalid
+types/values. The slug oracle uses a character state machine; the retry oracle
+uses an explicit schedule and cap cases. Neither calls the mock repair.
+Each invocation
 creates a new workspace from the broken fixture and a fresh agent home with a
 fixed identity. Memory, skills, titles, compaction, delegation, shell, and fallback
-are disabled. Only read_file/write_file/patch on `ports.py` pass the worker's tool
+are disabled. Only read_file/write_file/patch on the selected file pass the worker's tool
 policy, including attempted calls to tools absent from the advertised schemas.
 The normal agent loop is reused; the policy wrapper exists only in that process.
 

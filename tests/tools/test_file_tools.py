@@ -45,6 +45,46 @@ class TestFileTools:
         result = json.loads(read_file({"path": str(f)}))
         assert result["content"] == content
 
+    def test_read_pages_without_skipping_or_modifying_text(self, tmp_path):
+        f = tmp_path / "pages.txt"
+        content = "".join(f"line {i}\n" for i in range(1, 4002))
+        f.write_text(content, encoding="utf-8")
+        pages = []
+        offset = 1
+        while offset is not None:
+            result = json.loads(read_file({"path": str(f), "offset": offset}))
+            assert result["lines_read"] <= 2000
+            pages.append(result["content"])
+            offset = result["next_offset"]
+        assert "".join(pages) == content
+        assert len(pages) == 3
+
+    def test_explicit_offset_limit_and_cap(self, tmp_path):
+        f = tmp_path / "lines.txt"
+        f.write_text("".join(f"{i}\n" for i in range(1, 2101)), encoding="utf-8")
+        result = json.loads(read_file({"path": str(f), "offset": 100, "limit": 200}))
+        assert result["content"].splitlines() == [str(i) for i in range(100, 300)]
+        assert result["next_offset"] == 300
+        capped = json.loads(read_file({"path": str(f), "limit": 9999}))
+        assert capped["lines_read"] == 2000
+        assert capped["next_offset"] == 2001
+
+    @pytest.mark.parametrize("field,value", [
+        ("offset", 0), ("offset", -1), ("offset", True), ("offset", "1"),
+        ("limit", 0), ("limit", -1), ("limit", False), ("limit", 1.5),
+    ])
+    def test_invalid_page_parameters(self, field, value):
+        assert "error" in json.loads(read_file({"path": "unused", field: value}))
+
+    def test_empty_and_past_end_reads(self, tmp_path):
+        f = tmp_path / "empty.txt"
+        f.write_text("", encoding="utf-8")
+        for offset in (1, 100):
+            result = json.loads(read_file({"path": str(f), "offset": offset}))
+            assert result["content"] == ""
+            assert result["lines_read"] == 0
+            assert result["next_offset"] is None
+
     def test_write_new_file(self, tmp_path):
         f = tmp_path / "hello.txt"
 

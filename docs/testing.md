@@ -51,6 +51,10 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 
 ## Test Layout
 
+- `tests/agent/test_tool_output.py`: exact line/byte limits, UTF-8 and giant lines, metadata preservation, nested JSON recovery, artifact expiry, spill failures, and dispatch through real shell and special-case tools. All data uses the temporary Astra home; no model calls.
+- File-tool paging cases cover explicit/default/capped pages, invalid arguments, empty files, and complete multi-page reconstruction. CLI summary checks expose truncation and the saved path while retaining the real exit code.
+- Focused CLI check: activate the venv, then `python -m pytest tests/agent/test_tool_output.py tests/tools/test_file_tools.py tests/cli/test_tool_display.py tests/agent/test_events.py -q`.
+
 - `tests/test_features.py`: core regression tests for constants, config, registry, and prompt builder
 - `tests/test_config.py`: `load_user_config` / `save_user_config` partial-override and merge tests
 - `tests/test_llm.py`: `resolve_api_key` precedence and `validate_credentials` success/unauthorized/timeout paths
@@ -78,7 +82,7 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 
 ## Notes
 
-- `tests/test_benchmark_port.py` checks a failing baseline, a mock fix through the real agent loop, a fresh no-op run that must fail, worker timeout, checker failures, tool access policy, and incomplete usage coverage. All test model calls are synthetic. Run `python scripts/benchmark_port.py --mode live` only with authorization for the configured paid provider.
+- `tests/test_benchmark_port.py` checks all three task repairs through the real agent loop, fresh no-op runs that must fail, incomplete repair mutations, unknown task rejection, worker timeout, checker failures, tool access policy, and incomplete usage coverage. All test model calls are synthetic. Select new tasks with `--task slug_normalization` or `--task retry_delay`. Run `python scripts/benchmark_port.py --mode live` only with authorization for the configured paid provider.
 - `tests/test_usage_ledger.py` verifies usage-only chunks, missing/partial/zero counts, stream interruption/closure, fallback and compatibility attempts, delegate/compaction/title attribution, concurrent run isolation, and ledger write failures. All calls are mocked; no billing reconciliation is claimed.
 - `tests/test_cost.py` uses real LiteLLM arithmetic and bundled OpenAI/OpenRouter prices with fixed usage. Covers cache discounts, reasoning subsets, service tiers, unknown/invalid data, ledger integration, and a fresh interpreter with network connections blocked. No provider calls or billing reconciliation.
 - GPT-5.5 cases cover 271999/272000/272001 input tokens, cached input in threshold selection, whole-request rates, output excluded from selection, dated snapshot IDs, service-tier gaps, and fixed usage from the authorized live pilot. All replay checks are offline.

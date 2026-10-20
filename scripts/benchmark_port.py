@@ -1,4 +1,4 @@
-"""One fixed port-validation task. Defaults to a no-cost mock plumbing check.
+"""Three fixed repair tasks. Defaults to a no-cost mock plumbing check.
 
 Run: python scripts/benchmark_port.py --mode mock
 Live: python scripts/benchmark_port.py --mode live
@@ -19,6 +19,12 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 TASK = ROOT / "benchmarks" / "port_validation"
+TASK_FILES = {"port_validation": "ports.py", "slug_normalization": "slug.py",
+              "retry_delay": "retry.py"}
+MOCK_FIXES = {
+    "slug_normalization": 'import re\n\ndef slugify(text):\n    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")\n',
+    "retry_delay": 'def retry_delay(attempt):\n    if type(attempt) is not int or attempt < 0:\n        raise ValueError("Invalid attempt")\n    return 30 if attempt >= 5 else 2 ** attempt\n',
+}
 TOOLS = {"read_file", "write_file", "patch"}
 
 
@@ -69,13 +75,13 @@ def usage_summary(directory):
     return result
 
 
-def run_checker(workspace, *, checker=None, timeout=5):
+def run_checker(workspace, *, checker=None, timeout=5, filename="ports.py"):
     checker = checker or TASK / "check.py"
     # Do not pass model credentials to code executed during grading.
     env = {key: os.environ[key] for key in ("SYSTEMROOT", "WINDIR", "TEMP", "TMP", "PATH")
            if key in os.environ}
     try:
-        result = subprocess.run([sys.executable, "-I", str(checker), str(workspace / "ports.py")],
+        result = subprocess.run([sys.executable, "-I", str(checker), str(workspace / filename)],
                                 env=env, cwd=workspace, capture_output=True, text=True,
                                 timeout=timeout, check=False)
         if result.returncode:
@@ -91,38 +97,43 @@ def run_checker(workspace, *, checker=None, timeout=5):
         return {"grade_status": "error", "passed": None, "reason": "invalid_checker_result"}
 
 
-def mock_client(mode, workspace):
+def mock_client(mode, workspace, task_id="port_validation"):
     """Synthetic model events exercise the real loop, tools, ledger, and checker."""
-    original = (workspace / "ports.py").read_text(encoding="utf-8")
+    filename = TASK_FILES[task_id]
+    model = "mock-port-fix" if task_id == "port_validation" else f"mock-{task_id}-fix"
+    original = (workspace / filename).read_text(encoding="utf-8")
     fixed = original.replace("not isinstance(value, int)", "type(value) is not int").replace(
         "0 <= value <= 65536", "1 <= value <= 65535")
+    if task_id in MOCK_FIXES:
+        fixed = MOCK_FIXES[task_id]
 
     def stream(name=None, args=None):
         tool = NS(index=0, id=uuid4().hex, function=NS(name=name, arguments=json.dumps(args))) if name else None
-        yield NS(id="synthetic", model="mock-port-fix", usage=None, choices=[NS(
+        yield NS(id="synthetic", model=model, usage=None, choices=[NS(
             delta=NS(content=None if name else "Done.", tool_calls=[tool] if tool else None),
             finish_reason="tool_calls" if name else "stop")])
-        yield NS(id="synthetic", model="mock-port-fix", choices=[], usage={
+        yield NS(id="synthetic", model=model, choices=[], usage={
             "prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
             "prompt_tokens_details": {"cached_tokens": 0}})
 
-    streams = iter([stream("read_file", {"path": "ports.py"}),
-                    stream("patch", {"path": "ports.py", "old_text": original, "new_text": fixed}),
+    streams = iter([stream("read_file", {"path": filename}),
+                    stream("patch", {"path": filename, "old_text": original, "new_text": fixed}),
                     stream()] if mode == "mock" else [stream()])
     return NS(chat=NS(completions=NS(create=lambda **kwargs: next(streams))))
 
 
-def permitted_call(call, workspace):
+def permitted_call(call, workspace, filename="ports.py"):
     try:
         args = json.loads(call["function"]["arguments"])
         return (call["function"]["name"] in TOOLS
-                and Path(args.get("path", "")).resolve() == workspace / "ports.py")
+                and Path(args.get("path", "")).resolve() == workspace / filename)
     except (KeyError, ValueError, TypeError, AttributeError, OSError):
         return False
 
 
 def worker(directory):
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    filename = TASK_FILES[manifest["task_id"]]
     workspace = directory / "workspace"
     os.chdir(workspace)
     from astra_claw.constants import set_workspace_fence
@@ -132,7 +143,7 @@ def worker(directory):
     config = manifest["config"]
     config["model"]["api_key"] = os.environ.get("ASTRA_BENCH_API_KEY", "")
     if manifest["mode"] != "live":
-        fake = mock_client(manifest["mode"], workspace)
+        fake = mock_client(manifest["mode"], workspace, manifest["task_id"])
         loop.create_client = lambda *args, **kwargs: fake
 
     original_executor = loop.execute_tool_calls
@@ -142,11 +153,11 @@ def worker(directory):
         # the agent's tool access, including unrestricted read_file/search/shell.
         results = []
         for call in calls:
-            if permitted_call(call, workspace):
+            if permitted_call(call, workspace, filename):
                 results.extend(original_executor([call], **kwargs))
             else:
                 results.append({"role": "tool", "tool_call_id": call["id"],
-                                "content": json.dumps({"error": "Benchmark permits file tools on ports.py only"})})
+                                "content": json.dumps({"error": f"Benchmark permits file tools on {filename} only"})})
         return results
 
     loop.execute_tool_calls = bounded_tools
@@ -162,13 +173,19 @@ def worker(directory):
     save(directory / "execution.json", output)
 
 
-def run_benchmark(directory, *, mode="mock", timeout=90, max_turns=6):
+def run_benchmark(directory, *, mode="mock", timeout=90, max_turns=6, task_id="port_validation"):
     from astra_claw.agent.prompt_builder import DEFAULT_IDENTITY
     from astra_claw.config import load_config
     from astra_claw.llm import resolve_api_key
 
     if timeout <= 0 or max_turns <= 0:
         raise ValueError("Timeout and max turns must be positive")
+    if task_id not in TASK_FILES:
+        raise ValueError(f"Unknown task: {task_id}")
+    if mode not in {"mock", "mock-noop", "live"}:
+        raise ValueError(f"Unknown mode: {mode}")
+    task = ROOT / "benchmarks" / task_id
+    filename = TASK_FILES[task_id]
     key = ""
     if mode == "live":
         route = load_config()["model"]
@@ -178,15 +195,16 @@ def run_benchmark(directory, *, mode="mock", timeout=90, max_turns=6):
             raise RuntimeError("No model credentials configured")
         model = route["default"]
     else:
-        provider, model = "mock", "mock-port-fix"
+        provider = "mock"
+        model = "mock-port-fix" if task_id == "port_validation" else f"mock-{task_id}-fix"
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=False)
     workspace, home = directory / "workspace", directory / "home"
     workspace.mkdir()
     home.mkdir()
     (home / "SOUL.md").write_text(DEFAULT_IDENTITY, encoding="utf-8")
-    shutil.copyfile(TASK / "fixture" / "ports.py", workspace / "ports.py")
-    prompt = (TASK / "prompt.md").read_text(encoding="utf-8")
+    shutil.copyfile(task / "fixture" / filename, workspace / filename)
+    prompt = (task / "prompt.md").read_text(encoding="utf-8")
     config = {"model": {"provider": provider, "default": model, "fallback_provider": None,
                          "max_completion_tokens": 2048},
               "agent": {"max_turns": max_turns}, "compression": {"enabled": False},
@@ -194,11 +212,11 @@ def run_benchmark(directory, *, mode="mock", timeout=90, max_turns=6):
               "tools": {"enabled_toolsets": ["filesystem"]}, "session": {"auto_title": False}}
     harness_bytes = b"".join(str(p.relative_to(ROOT)).encode() + p.read_bytes()
                              for p in sorted((ROOT / "astra_claw").rglob("*.py")))
-    manifest = {"task_id": "port_validation", "task_version": 1, "mode": mode,
+    manifest = {"task_id": task_id, "task_version": 1, "mode": mode,
                 "usage_origin": "provider" if mode == "live" else "synthetic",
                 "prompt": prompt, "prompt_sha256": digest(prompt.encode()),
-                "fixture_sha256": digest((workspace / "ports.py").read_bytes()),
-                "checker_sha256": digest((TASK / "check.py").read_bytes()),
+                "fixture_sha256": digest((workspace / filename).read_bytes()),
+                "checker_sha256": digest((task / "check.py").read_bytes()),
                 "runner_sha256": digest(Path(__file__).read_bytes()),
                 "harness_sha256": digest(harness_bytes), "config": config,
                 "tools": sorted(TOOLS), "timeout_seconds": timeout, "python_version": sys.version}
@@ -217,10 +235,10 @@ def run_benchmark(directory, *, mode="mock", timeout=90, max_turns=6):
         except subprocess.TimeoutExpired:
             execution = {"execution_status": "timeout"}
     elapsed = time.perf_counter() - started
-    grade = run_checker(workspace)
-    if digest((TASK / "check.py").read_bytes()) != manifest["checker_sha256"]:
+    grade = run_checker(workspace, checker=task / "check.py", filename=filename)
+    if digest((task / "check.py").read_bytes()) != manifest["checker_sha256"]:
         grade = {"grade_status": "error", "passed": None, "reason": "checker_changed"}
-    result = {"task_id": "port_validation", "task_version": 1, "mode": mode,
+    result = {"task_id": task_id, "task_version": 1, "mode": mode,
               "usage_origin": manifest["usage_origin"], **execution, "duration_seconds": elapsed,
               "grade": grade, "verified_success": execution["execution_status"] == "completed"
               and grade["grade_status"] == "graded" and grade["passed"],
@@ -231,6 +249,7 @@ def run_benchmark(directory, *, mode="mock", timeout=90, max_turns=6):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--task", choices=tuple(TASK_FILES), default="port_validation")
     parser.add_argument("--mode", choices=("mock", "mock-noop", "live"), default="mock")
     parser.add_argument("--output", type=Path, help="New result directory; existing directories are rejected")
     parser.add_argument("--timeout", type=float, default=90)
@@ -241,8 +260,9 @@ def main():
         worker(args.worker.resolve())
         return 0
     from astra_claw.constants import get_astraclaw_home
-    directory = args.output or get_astraclaw_home() / "benchmarks" / "port_validation" / uuid4().hex
-    result = run_benchmark(directory, mode=args.mode, timeout=args.timeout, max_turns=args.max_turns)
+    directory = args.output or get_astraclaw_home() / "benchmarks" / args.task / uuid4().hex
+    result = run_benchmark(directory, mode=args.mode, timeout=args.timeout,
+                           max_turns=args.max_turns, task_id=args.task)
     print(json.dumps(result, indent=2))
     print(f"Result: {directory.resolve() / 'result.json'}")
     return 0 if result["verified_success"] else 1
