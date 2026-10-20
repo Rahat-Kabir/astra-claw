@@ -2,6 +2,15 @@
 
 ## Architecture
 
+### One-shot output ownership (v0.4.6)
+
+`__main__.py` starts the `CliUI` response lifecycle and passes `ui.stream_token`
+as `run_conversation(stream_writer=...)`. Plain output streams through the UI;
+`finish_assistant_response()` adds its trailing newline without printing the
+answer again. Markdown output stays buffered until the final render. This avoids
+the default stdout stream printing a first copy outside the UI. Interactive mode
+already uses this ownership pattern.
+
 ### Bounded tool output (v0.4.5)
 
 `agent/tool_runner.py` calls `agent/tool_output.py::bound_tool_result()` after

@@ -92,7 +92,7 @@ astra-claw/
 |       `-- delegate_tool.py  # delegate tool - spawn one isolated child AstraAgent for a subtask
 |-- tests/
 |   |-- agent/               # mocked agent loop tests (includes compaction coverage)
-|   |-- cli/                 # CLI command/completion/REPL tests
+|   |-- cli/                 # CLI command/completion/REPL tests + test_one_shot.py output regression
 |   |-- tools/               # tool-level tests (includes test_memory_tool.py, test_skills_tool.py)
 |   |-- test_features.py     # core regression tests
 |   |-- test_session.py      # session persistence tests

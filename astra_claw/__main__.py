@@ -160,7 +160,8 @@ def main():
         for warning in prepared_prompt.warnings:
             ui.print_warning(warning)
         ui.set_render_markdown(bool((agent.config.get("cli") or {}).get("render_markdown", False)))
-        response, _ = agent.run_conversation(prepared_prompt.content)
+        ui.begin_assistant_response()
+        response, _ = agent.run_conversation(prepared_prompt.content, stream_writer=ui.stream_token)
         ui.finish_assistant_response(response or "")
         return
 

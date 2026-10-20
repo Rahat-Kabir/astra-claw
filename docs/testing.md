@@ -51,6 +51,8 @@ python -m pytest tests/tools/test_web_tools.py tests/cli/test_tool_display.py te
 
 ## Test Layout
 
+- `tests/cli/test_one_shot.py`: real entry point and agent loop with a fake provider stream; plain output is live, Markdown waits for completion, each answer appears once, and the default stdout writer stays silent. Run with `python -m pytest tests/cli/test_one_shot.py tests/cli/test_ui_markdown.py -q`.
+
 - `tests/agent/test_tool_output.py`: exact line/byte limits, UTF-8 and giant lines, metadata preservation, nested JSON recovery, artifact expiry, spill failures, and dispatch through real shell and special-case tools. All data uses the temporary Astra home; no model calls.
 - File-tool paging cases cover explicit/default/capped pages, invalid arguments, empty files, and complete multi-page reconstruction. CLI summary checks expose truncation and the saved path while retaining the real exit code.
 - Focused CLI check: activate the venv, then `python -m pytest tests/agent/test_tool_output.py tests/tools/test_file_tools.py tests/cli/test_tool_display.py tests/agent/test_events.py -q`.

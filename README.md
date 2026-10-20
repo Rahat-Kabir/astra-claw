@@ -53,6 +53,7 @@ It is not designed as:
 - Discovers lightweight markdown skills in `~/.astraclaw/skills/**/SKILL.md`, lists them with `/skills`, loads one for a turn with `/skill <name> <request>` or `/<skill-name> <request>`, and exposes a `skills` tool so the agent can `list` or `view` full instructions on demand
 - Persists interactive sessions as JSONL transcripts with auto-generated 3-5 word titles after the first substantive exchange (skips greeting-only openers; daemon-thread, silent-fail)
 - Streams responses as tokens arrive (plain text by default; optional Rich Markdown rendering after each turn)
+- One-shot commands use the same output renderer: plain text streams once; Markdown renders once after completion.
 - Supports OpenAI and OpenRouter
 - Retries once on a fallback provider/model for transient LLM failures
 - Groups tools by `toolset` and filters unavailable tools before exposing schemas to the model
@@ -281,7 +282,7 @@ astra-claw/
 |       `-- delegate_tool.py  # spawn one isolated child agent for a self-contained subtask
 |-- tests/
 |   |-- agent/               # mocked agent loop tests
-|   |-- cli/                 # slash command, skill, and REPL tests
+|   |-- cli/                 # slash command, skill, REPL, and one-shot rendering tests
 |   |-- tools/               # tool-level tests
 |   |-- test_features.py     # core regression tests
 |   |-- test_soul.py         # SOUL.md seeding and loading tests

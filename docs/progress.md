@@ -637,6 +637,17 @@ Why: one large file or command result could consume the model context before com
 - [x] Verified CLI: `python -m pytest tests -q` -> 627 passed; `git diff --check` passed
 - [x] README, architecture, project structure, testing notes, and version updated; no paid requests or new dependencies
 
+## v0.4.6 - Single One-Shot Reply (2026-10-21)
+
+Why: one-shot mode streamed directly to stdout, then printed the returned answer again through the UI.
+
+### Completed
+
+- [x] One-shot output now uses the existing `CliUI` streaming/finalization lifecycle: plain text streams once; Markdown renders once after completion
+- [x] Regression reproduced before the fix in both modes; fake-provider tests exercise the real entry point and loop, including live-versus-buffered behavior
+- [x] Verified CLI: focused checks 15 passed; full suite 629 passed; `git diff --check` passed
+- [x] Docs and patch version updated; no paid model calls
+
 ## Next
 
 - [ ] Skills polish: optional install flow or richer frontmatter.
